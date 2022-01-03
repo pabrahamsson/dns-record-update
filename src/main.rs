@@ -69,30 +69,6 @@ struct Lease {
     auth: VaultAuth,
 }
 
-/*
-{
-    "request_id":"f9504633-b223-9ae1-d1af-9281f085820f",
-    "lease_id":"",
-    "renewable":false,
-    "lease_duration":0,
-    "data":{
-        "data":{
-            "token":"-O2WPfjZMZgCQE86Nu7yzz6IjUGjCoi_mfpLKqdi"
-        },
-        "metadata":{
-            "created_time":"2021-12-31T04:50:09.052330525Z",
-            "custom_metadata":null,
-            "deletion_time":"",
-            "destroyed":false,
-            "version":2
-        }
-    },
-    "wrap_info":null,
-    "warnings":null,
-    "auth":null
-}
-*/
-
 #[derive(Deserialize)]
 #[allow(dead_code)]
 struct VaultKV2Metadata {
