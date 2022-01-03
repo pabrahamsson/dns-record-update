@@ -143,16 +143,16 @@ fn get_zone_id<ApiClientType: ApiClient>(zone_name: &str, api_client: &ApiClient
     }
 }
 
-fn get_current_ip() -> Option<Ipv4Addr> {
-    let name_server_config_group = NameServerConfigGroup::from_ips_clear(&[RESOLVER_ADDRESS], 53, true);
+fn dns_lookup(resolvers: &[IpAddr], hostname: &str) -> Option<Ipv4Addr> {
+    let name_server_config_group = NameServerConfigGroup::from_ips_clear(resolvers, 53, true);
     let resolver_config = ResolverConfig::from_parts(None, [].to_vec(), name_server_config_group);
     let resolver = Resolver::new(resolver_config, ResolverOpts::default()).ok()?;
-    let response = resolver.ipv4_lookup(LOOKUP_HOSTNAME).ok()?;
-    let address = response.iter().next().expect("no address found!");
+    let response = resolver.ipv4_lookup(hostname).ok()?;
+    let address = response.iter().next().expect("no address found");
     Some(*address)
 }
 
-fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifier: &str, api_client: &ApiClientType) -> Option<(String,Ipv4Addr)> {
+fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifier: &str, api_client: &ApiClientType) -> Option<String> {
     let response = api_client.request(&dns::ListDnsRecords {
         zone_identifier,
         params: dns::ListDnsRecordsParams {
@@ -163,12 +163,7 @@ fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifi
     match response {
         Ok(records) => {
             if records.result.len() == 1 {
-                let ip_address = if let &dns::DnsContent::A { content } = &records.result[0].content {
-                    content
-                } else {
-                    panic!("No A record found for {}", record_name)
-                };
-                Some((records.result[0].id.clone(), ip_address))
+                Some(records.result[0].id.clone())
             } else {
                 panic!("Unable to lookup address for: {}", record_name)
             }
@@ -201,18 +196,19 @@ fn dns<ApiClientType: ApiClient>(arg_matches: &ArgMatches, api_client: &ApiClien
     let zone_name_missing = format!("missing '{}': {}", "ZONE_NAME", usage);
     let zone_name = arg_matches.value_of("zone_name").expect(&zone_name_missing);
 
-    let current_ip = get_current_ip();
-    let zone_identifier = get_zone_id(&zone_name, api_client).unwrap();
-    let (record_id, record_address) = get_current_record(&record_name, &zone_identifier, api_client).unwrap();
-    if &current_ip.unwrap() == &record_address {
+    let current_ip = dns_lookup(&vec![RESOLVER_ADDRESS], LOOKUP_HOSTNAME);
+    let lookup_ip = dns_lookup(CLOUDFLARE_IPS, &record_name);
+    if &current_ip == &lookup_ip {
         println!("DNS record for {} ({}) is up to date",
-            &record_name.to_string(),
-            record_address)
+            &record_name,
+            &lookup_ip.unwrap())
     } else {
         println!("DNS record for {} ({} ==> {}) will be updated",
-            &record_name.to_string(),
-            record_address,
-            &current_ip.unwrap().to_string());
+            &record_name,
+            &lookup_ip.unwrap(),
+            &current_ip.unwrap());
+        let zone_identifier = get_zone_id(&zone_name, api_client).unwrap();
+        let record_id = get_current_record(&record_name, &zone_identifier, api_client).unwrap();
         update_record(&record_id, &zone_identifier, &record_name, &current_ip, api_client)
     }
 }
