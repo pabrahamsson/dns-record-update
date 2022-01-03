@@ -175,8 +175,8 @@ fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifi
     }
 }
 
-fn update_record<ApiClientType: ApiClient>(record_identifier: &str, zone_identifier: &str, name: &str, address: &Option<Ipv4Addr>, api_client: &ApiClientType) {
-    let _response = api_client.request(&dns::UpdateDnsRecord {
+fn update_record<ApiClientType: ApiClient>(record_identifier: &str, zone_identifier: &str, name: &str, address: &Option<Ipv4Addr>, api_client: &ApiClientType) -> Option<()> {
+    let response = api_client.request(&dns::UpdateDnsRecord {
         zone_identifier: zone_identifier,
         identifier: record_identifier,
         params: dns::UpdateDnsRecordParams {
@@ -186,6 +186,13 @@ fn update_record<ApiClientType: ApiClient>(record_identifier: &str, zone_identif
             content: dns::DnsContent::A { content: address.unwrap() },
         },
     });
+    match response {
+        Ok(_) => Some(()),
+        Err(e) => {
+            handle_cf_error(&e);
+            None
+        }
+    }
 }
 
 fn dns<ApiClientType: ApiClient>(arg_matches: &ArgMatches, api_client: &ApiClientType) {
@@ -209,7 +216,7 @@ fn dns<ApiClientType: ApiClient>(arg_matches: &ArgMatches, api_client: &ApiClien
             &current_ip.unwrap());
         let zone_identifier = get_zone_id(&zone_name, api_client).unwrap();
         let record_id = get_current_record(&record_name, &zone_identifier, api_client).unwrap();
-        update_record(&record_id, &zone_identifier, &record_name, &current_ip, api_client)
+        update_record(&record_id, &zone_identifier, &record_name, &current_ip, api_client);
     }
 }
 
