@@ -7,6 +7,10 @@ extern crate ureq;
 
 use std::{env, fs};
 use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    thread,
+    time::Duration,
+};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use cloudflare::endpoints::{dns, zone};
 use cloudflare::framework::{
@@ -251,94 +255,99 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
     Ok(response.data.data["token"].to_string())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let sections = hashmap! {
-        "dns" => Section{
-            args: vec![
-                Arg::with_name("zone_name").required(true),
-                Arg::with_name("record_name").required(true),
-            ],
-            description: "DNS records for a zone",
-            function: dns
+//fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main(){
+    loop {
+        let sections = hashmap! {
+            "dns" => Section{
+                args: vec![
+                    Arg::with_name("zone_name").required(true),
+                    Arg::with_name("record_name").required(true),
+                ],
+                description: "DNS records for a zone",
+                function: dns
+            }
+        };
+
+        let vault_token = get_vault_token();
+        let cf_key = get_cf_api_key(&vault_token.unwrap());
+
+        let mut cli = App::new("cf-rust")
+            .version("0.1")
+            .author("Petter Abrahamsson <petter@jebus.nu>")
+            .about("Tiny Cloudflare API client")
+            .arg(Arg::with_name("email")
+                .long("email")
+                .help("Email address associated with your account")
+                .takes_value(true)
+                .requires("auth-key"))
+            .arg(Arg::with_name("auth-key")
+                .long("auth-key")
+                .env("CF_RS_AUTH_KEY")
+                .help("API key generated on the \"My Account\" page")
+                .takes_value(true)
+                .requires("email"))
+            .arg(Arg::with_name("auth-token")
+                .long("auth-token")
+                .env("CF_RS_AUTH_TOKEN")
+                .help("API token generated on the \"My Account\" page")
+                .takes_value(true)
+                .conflicts_with_all(&["email", "auth-key"]))
+            .setting(AppSettings::ArgRequiredElseHelp);
+
+        for (section_name, section) in sections.iter() {
+            let mut subcommand = SubCommand::with_name(section_name).about(section.description);
+
+            for arg in &section.args {
+                subcommand = subcommand.arg(arg);
+            }
+            cli = cli.subcommand(subcommand);
         }
-    };
 
-    let vault_token = get_vault_token();
-    let cf_key = get_cf_api_key(&vault_token.unwrap());
+        let matches = cli.get_matches();
+        let matched_sections =
+            sections
+                .iter()
+                .filter(|&(section_name, _): &(&&str, &Section<HttpApiClient>)| {
+                    matches.subcommand_matches(section_name).is_some()
+                });
 
-    let mut cli = App::new("cf-rust")
-        .version("0.1")
-        .author("Petter Abrahamsson <petter@jebus.nu>")
-        .about("Tiny Cloudflare API client")
-        .arg(Arg::with_name("email")
-            .long("email")
-            .help("Email address associated with your account")
-            .takes_value(true)
-            .requires("auth-key"))
-        .arg(Arg::with_name("auth-key")
-            .long("auth-key")
-            .env("CF_RS_AUTH_KEY")
-            .help("API key generated on the \"My Account\" page")
-            .takes_value(true)
-            .requires("email"))
-        .arg(Arg::with_name("auth-token")
-            .long("auth-token")
-            .env("CF_RS_AUTH_TOKEN")
-            .help("API token generated on the \"My Account\" page")
-            .takes_value(true)
-            .conflicts_with_all(&["email", "auth-key"]))
-        .setting(AppSettings::ArgRequiredElseHelp);
+        let email = matches.value_of("email");
+        let key = matches.value_of("auth-key");
+        //let token = matches.value_of("auth-token");
+        let token = Some(cf_key.as_ref().unwrap().trim_matches('"'));
 
-    for (section_name, section) in sections.iter() {
-        let mut subcommand = SubCommand::with_name(section_name).about(section.description);
+        let credentials: Credentials = if let Some(key) = key {
+            Credentials::UserAuthKey {
+                email: email.unwrap().to_string(),
+                key: key.to_string(),
+            }
+        } else if let Some(token) = token {
+            Credentials::UserAuthToken {
+                token: token.to_string(),
+            }
+        } else {
+            panic!("Either API token or API key + email pair must be provided")
+        };
 
-        for arg in &section.args {
-            subcommand = subcommand.arg(arg);
+        let api_client = HttpApiClient::new(
+            credentials,
+            HttpApiClientConfig::default(),
+            Environment::Production,
+        //)?;
+        ).unwrap();
+
+        for (section_name, section) in matched_sections {
+            (section.function)(
+                matches.subcommand_matches(section_name).unwrap(),
+                &api_client,
+            );
         }
-        cli = cli.subcommand(subcommand);
+
+        //zone(matches.subcommand_matches("zone").unwrap(), &api_client);
+        //list_zone(matches.subcommand_matches("zone").unwrap(), &api_client);
+
+        //Ok(())
+        thread::sleep(Duration::from_secs(120));
     }
-
-    let matches = cli.get_matches();
-    let matched_sections =
-        sections
-            .iter()
-            .filter(|&(section_name, _): &(&&str, &Section<HttpApiClient>)| {
-                matches.subcommand_matches(section_name).is_some()
-            });
-
-    let email = matches.value_of("email");
-    let key = matches.value_of("auth-key");
-    //let token = matches.value_of("auth-token");
-    let token = Some(cf_key.as_ref().unwrap().trim_matches('"'));
-
-    let credentials: Credentials = if let Some(key) = key {
-        Credentials::UserAuthKey {
-            email: email.unwrap().to_string(),
-            key: key.to_string(),
-        }
-    } else if let Some(token) = token {
-        Credentials::UserAuthToken {
-            token: token.to_string(),
-        }
-    } else {
-        panic!("Either API token or API key + email pair must be provided")
-    };
-
-    let api_client = HttpApiClient::new(
-        credentials,
-        HttpApiClientConfig::default(),
-        Environment::Production,
-    )?;
-
-    for (section_name, section) in matched_sections {
-        (section.function)(
-            matches.subcommand_matches(section_name).unwrap(),
-            &api_client,
-        );
-    }
-
-    //zone(matches.subcommand_matches("zone").unwrap(), &api_client);
-    //list_zone(matches.subcommand_matches("zone").unwrap(), &api_client);
-
-    Ok(())
 }
