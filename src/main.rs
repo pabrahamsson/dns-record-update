@@ -348,6 +348,6 @@ fn main(){
         //list_zone(matches.subcommand_matches("zone").unwrap(), &api_client);
 
         //Ok(())
-        thread::sleep(Duration::from_secs(120));
+        thread::sleep(Duration::from_secs(120))
     }
 }
