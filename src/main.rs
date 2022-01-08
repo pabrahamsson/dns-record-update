@@ -10,10 +10,7 @@ use std::{
     env,
     fs,
     io::Write,
-    net::{
-        IpAddr,
-        Ipv4Addr,
-    },
+    net::{IpAddr, Ipv4Addr},
     thread,
     time::Duration,
 };
@@ -27,13 +24,8 @@ use cloudflare::framework::{
     Environment, HttpApiClient, HttpApiClientConfig,
 };
 use env_logger::Builder;
-use log::{
-    error,
-    info,
-    warn,
-    LevelFilter,
-};
-use serde::Deserialize;
+use log::{error, info, warn, LevelFilter};
+use serde::{Deserialize, Serialize};
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 
@@ -48,6 +40,13 @@ struct Section<'a, ApiClientType: ApiClient> {
     args: Vec<Arg<'a, 'a>>,
     description: &'a str,
     function: SectionFunction<ApiClientType>,
+}
+
+#[derive(Serialize)]
+struct LogMessage {
+    timestamp: String,
+    loglevel: String,
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -290,13 +289,21 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
 fn main(){
     Builder::new()
         .format(|buf, record| {
+            let log_message = LogMessage {
+                timestamp: format!("{}", Local::now().format("%Y-%m-%dT%H:%M:%S")),
+                loglevel: record.level().to_string(),
+                message: record.args().to_string(),
+            };
             writeln!(buf,
                 "{}",
+                serde_json::to_string(&log_message).unwrap()
+                /*
                 serde_json::json!({
                     "timestamp": format!("{}", Local::now().format("%Y-%m-%dT%H:%M:%S")),
                     "loglevel": record.level().as_str(),
                     "message": record.args()
                 }).to_string()
+                */
             )
             /*
             writeln!(buf,
@@ -309,7 +316,6 @@ fn main(){
         })
         .filter(None, LevelFilter::Info)
         .init();
-    //env_logger::init();
     loop {
         let sections = hashmap! {
             "dns" => Section{
