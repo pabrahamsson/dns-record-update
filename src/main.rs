@@ -2,6 +2,7 @@
 extern crate maplit;
 extern crate clap;
 extern crate cloudflare;
+extern crate env_logger;
 extern crate trust_dns_resolver;
 extern crate ureq;
 
@@ -19,6 +20,7 @@ use cloudflare::framework::{
     response::ApiFailure,
     Environment, HttpApiClient, HttpApiClientConfig,
 };
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
@@ -110,18 +112,23 @@ fn print_type_of<T>(_: &T) {
 fn handle_cf_error(api_failure: &ApiFailure) {
     match api_failure {
         ApiFailure::Error(status, errors) => {
-            println!("HTTP {}:", status);
+            //println!("HTTP {}:", status);
+            warn!("HTTP {}:", status);
             for err in &errors.errors {
-                println!("Error {}: {}", err.code, err.message);
+                //println!("Error {}: {}", err.code, err.message);
+                warn!("Error {}: {}", err.code, err.message);
                 for (k, v) in &err.other {
-                    println!("{}: {}", k, v);
+                    //println!("{}: {}", k, v);
+                    warn!("{}: {}", k, v);
                 }
             }
             for (k, v) in &errors.other {
-                println!("{}: {}", k, v);
+                //println!("{}: {}", k, v);
+                warn!("{}: {}", k, v);
             }
         }
-        ApiFailure::Invalid(reqwest_err) => println!("Error: {}", reqwest_err),
+        //ApiFailure::Invalid(reqwest_err) => println!("Error: {}", reqwest_err),
+        ApiFailure::Invalid(reqwest_err) => warn!("Error: {}", reqwest_err),
     }
 }
 
@@ -210,11 +217,13 @@ fn dns<ApiClientType: ApiClient>(arg_matches: &ArgMatches, api_client: &ApiClien
     let current_ip = dns_lookup(&vec![RESOLVER_ADDRESS], LOOKUP_HOSTNAME);
     let lookup_ip = dns_lookup(CLOUDFLARE_IPS, &record_name);
     if &current_ip == &lookup_ip {
-        println!("DNS record for {} ({}) is up to date",
+        //println!("DNS record for {} ({}) is up to date",
+        info!("DNS record for {} ({}) is up to date",
             &record_name,
             &lookup_ip.unwrap())
     } else {
-        println!("DNS record for {} ({} ==> {}) will be updated",
+        //println!("DNS record for {} ({} ==> {}) will be updated",
+        info!("DNS record for {} ({} ==> {}) will be updated",
             &record_name,
             &lookup_ip.unwrap(),
             &current_ip.unwrap());
@@ -257,6 +266,7 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
 
 //fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main(){
+    env_logger::init();
     loop {
         let sections = hashmap! {
             "dns" => Section{
