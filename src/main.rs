@@ -246,10 +246,20 @@ fn dns<ApiClientType: ApiClient>(arg_matches: &ArgMatches, api_client: &ApiClien
 }
 
 fn get_vault_token() -> Result<String, ureq::Error> {
-    let default_jwt_token_path: Result<String, String> = Ok(String::from(JWT_TOKEN_PATH));
-    let default_vault_addr: Result<String, String> = Ok(String::from(VAULT_ADDR));
-    let jwt_token_path = env::var("JWT_TOKEN_PATH").or(default_jwt_token_path).unwrap();
-    let vault_addr = env::var("VAULT_ADDR").or(default_vault_addr).unwrap();
+    //let default_jwt_token_path: Result<String, String> = Ok(String::from(JWT_TOKEN_PATH));
+    //let default_vault_addr: Result<String, String> = Ok(String::from(VAULT_ADDR));
+    //let jwt_token_path = env::var("JWT_TOKEN_PATH").or(default_jwt_token_path).unwrap();
+    let jwt_token_path = env::var("JWT_TOKEN_PATH").ok();
+    let jwt_token_path = jwt_token_path
+        .as_ref()
+        .map(String::as_str)
+        .and_then(|s| if s.is_empty() { None } else { Some(s) })
+        .unwrap_or(JWT_TOKEN_PATH);
+    let vault_addr = env::var("VAULT_ADDR").ok();
+    let vault_addr = vault_addr
+        .as_ref()
+        .map(String::as_str)
+        .unwrap_or(VAULT_ADDR);
     let jwt = fs::read_to_string(jwt_token_path)?;
     let mount = "kubernetes";
     let role = "cf-dyn-dns";
@@ -281,11 +291,21 @@ fn main(){
     Builder::new()
         .format(|buf, record| {
             writeln!(buf,
+                "{}",
+                serde_json::json!({
+                    "timestamp": format!("{}", Local::now().format("%Y-%m-%dT%H:%M:%S")),
+                    "loglevel": record.level().as_str(),
+                    "message": record.args()
+                }).to_string()
+            )
+            /*
+            writeln!(buf,
                 "{} [{}] - {}",
                 Local::now().format("%Y-%m-%dT%H:%M:%S"),
                 record.level(),
                 record.args()
             )
+            */
         })
         .filter(None, LevelFilter::Info)
         .init();
