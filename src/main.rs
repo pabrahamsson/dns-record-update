@@ -6,12 +6,18 @@ extern crate env_logger;
 extern crate trust_dns_resolver;
 extern crate ureq;
 
-use std::{env, fs};
-use std::net::{IpAddr, Ipv4Addr};
 use std::{
+    env,
+    fs,
+    io::Write,
+    net::{
+        IpAddr,
+        Ipv4Addr,
+    },
     thread,
     time::Duration,
 };
+use chrono::Local;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use cloudflare::endpoints::{dns, zone};
 use cloudflare::framework::{
@@ -20,7 +26,13 @@ use cloudflare::framework::{
     response::ApiFailure,
     Environment, HttpApiClient, HttpApiClientConfig,
 };
-use log::{debug, error, info, warn};
+use env_logger::Builder;
+use log::{
+    error,
+    info,
+    warn,
+    LevelFilter,
+};
 use serde::Deserialize;
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
@@ -266,7 +278,18 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
 
 //fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main(){
-    env_logger::init();
+    Builder::new()
+        .format(|buf, record| {
+            writeln!(buf,
+                "{} [{}] - {}",
+                Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        .init();
+    //env_logger::init();
     loop {
         let sections = hashmap! {
             "dns" => Section{

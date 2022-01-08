@@ -130,6 +130,7 @@ checksum = "22a9137b95ea06864e018375b72adfb7db6e6f68cfc8df5a04d00288050485ee"
 name = "cf-dns-record-update"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "cloudflare",
  "env_logger",
