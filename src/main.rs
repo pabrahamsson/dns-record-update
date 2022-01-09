@@ -70,30 +70,14 @@ struct Lease {
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
-struct VaultKV2Metadata {
-    created_time: String,
-    deletion_time: String,
-    destroyed: bool,
-    version: u64,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
 struct VaultKV2Data {
     data: serde_json::Value,
-    metadata: VaultKV2Metadata,
 }
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
 struct VaultKV2 {
-    request_id: String,
-    lease_id: String,
-    renewable: bool,
-    lease_duration: u32,
     data: VaultKV2Data,
-    wrap_info: Option<String>,
-    warnings: Option<Vec<String>>,
 }
 
 /*
@@ -140,15 +124,6 @@ fn get_zone_id<ApiClientType: ApiClient>(zone_name: &str, api_client: &ApiClient
             None
         }
     }
-}
-
-fn dns_lookup(resolvers: &[IpAddr], hostname: &str) -> Option<Ipv4Addr> {
-    let name_server_config_group = NameServerConfigGroup::from_ips_clear(resolvers, 53, true);
-    let resolver_config = ResolverConfig::from_parts(None, [].to_vec(), name_server_config_group);
-    let resolver = Resolver::new(resolver_config, ResolverOpts::default()).ok()?;
-    let response = resolver.ipv4_lookup(hostname).ok()?;
-    let address = response.iter().next().expect("no address found");
-    Some(*address)
 }
 
 fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifier: &str, api_client: &ApiClientType) -> Option<String> {
@@ -210,6 +185,15 @@ fn dns<ApiClientType: ApiClient>(zone_name: &str, record_name: &str, api_client:
         let record_id = get_current_record(record_name, &zone_identifier, api_client).unwrap();
         update_record(&record_id, &zone_identifier, record_name, &current_ip, api_client);
     }
+}
+
+fn dns_lookup(resolvers: &[IpAddr], hostname: &str) -> Option<Ipv4Addr> {
+    let name_server_config_group = NameServerConfigGroup::from_ips_clear(resolvers, 53, true);
+    let resolver_config = ResolverConfig::from_parts(None, [].to_vec(), name_server_config_group);
+    let resolver = Resolver::new(resolver_config, ResolverOpts::default()).ok()?;
+    let response = resolver.ipv4_lookup(hostname).ok()?;
+    let address = response.iter().next().expect("no address found");
+    Some(*address)
 }
 
 fn get_vault_token() -> Result<String, ureq::Error> {
