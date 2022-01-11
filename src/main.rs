@@ -31,19 +31,19 @@ const LOOKUP_HOSTNAME: &str = "myip.opendns.com";
 const RESOLVER_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222));
 const VAULT_ADDR: &str = "http://vault.vault.svc:8200";
 
-struct Config {
-    zone: String,
-    record: String,
+struct Config<'a> {
+    zone: &'a str,
+    record: &'a str,
 }
 
-impl Config {
+impl<'a> Config<'a> {
     fn new(args: &[String]) -> Result<Config, &str> {
         if args.len() != 3 {
             return Err("Incorrect number of arguments");
         }
 
-        let zone = args[1].clone();
-        let record = args[2].clone();
+        let zone = &args[1];
+        let record = &args[2];
 
         Ok(Config { zone, record })
     }
