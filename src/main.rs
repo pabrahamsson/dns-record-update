@@ -239,7 +239,6 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
     Ok(response.data.data["token"].to_string())
 }
 
-//fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let config = Config::new(&args).unwrap_or_else(|err| {
@@ -260,6 +259,14 @@ fn main() {
         })
         .filter(None, LevelFilter::Info)
         .init();
+
+    if let Err(e) = run(config) {
+        println!("Application error: {}", e);
+        process::exit(1);
+    }
+}
+
+fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let vault_token = get_vault_token().expect("Failed to get Vault token");
         let cf_key = get_cf_api_key(&vault_token).expect("Failed to get CF api key");
