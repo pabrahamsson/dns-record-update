@@ -1,5 +1,6 @@
-FROM docker.io/rust:latest as builder
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest as builder
 WORKDIR /usr/src/app
+RUN microdnf install rust-toolset openssl-devel perl
 COPY Cargo.* .
 COPY src/ src
 RUN ls -al && cargo build --release
