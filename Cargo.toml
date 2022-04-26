@@ -1,13 +1,13 @@
 [package]
 name = "cf-dns-record-update"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 chrono = "0.4.19"
-cloudflare = "0.9.0"
+cloudflare = "0.9.1"
 env_logger = "0.9.0"
 log = "0.4.0"
 openssl = { version = "0.10.38", features = ["vendored"] }
