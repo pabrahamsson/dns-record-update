@@ -206,8 +206,8 @@ fn get_vault_token() -> Result<String, ureq::Error> {
         .and_then(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(VAULT_ADDR);
     let jwt = fs::read_to_string(jwt_token_path)?;
-    let mount = "kubernetes";
-    let role = "cf-dyn-dns";
+    let mount = "ocp/cf-dyn-dns-k8s";
+    let role = "cf-dyn-dns-secret-reader";
     let vault_login_endpoint = format!("{0}/v1/auth/{1}/login", vault_addr, mount);
     let response: Lease = ureq::post(&vault_login_endpoint)
         .set("X-Vault-Request", "true")
