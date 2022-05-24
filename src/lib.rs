@@ -227,12 +227,12 @@ fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
         .map(String::as_str)
         .and_then(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(VAULT_ADDR);
-    let vault_secret_endpoint = format!("{0}/v1/kv/data/cf-dns-gtvc-net-api", vault_addr);
+    let vault_secret_endpoint = format!("{0}/v1/ocp/cf-dyn-dns/data/cf-api", vault_addr);
     let response: VaultKV2 = ureq::get(&vault_secret_endpoint)
         .set("X-Vault-Token", token)
         .call()?
         .into_json()?;
-    Ok(response.data.data["token"].to_string())
+    Ok(response.data.data["key"].to_string())
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
