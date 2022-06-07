@@ -1,3 +1,4 @@
+#![allow(clippy::redundant_field_names)]
 extern crate cloudflare;
 extern crate env_logger;
 extern crate trust_dns_resolver;
@@ -112,7 +113,7 @@ fn get_zone_id<ApiClientType: ApiClient>(zone_name: &str, api_client: &ApiClient
             if records.result.len() == 1 {
                 Some(records.result[0].id.clone())
             } else {
-                panic!("No zone found for: {}", zone_name.to_string())
+                panic!("No zone found for: {}", zone_name)
             }
         }
         Err(e) => {
@@ -166,9 +167,9 @@ fn update_record<ApiClientType: ApiClient>(record_identifier: &str, zone_identif
 }
 
 fn dns<ApiClientType: ApiClient>(zone_name: &str, record_name: &str, api_client: &ApiClientType) {
-    let current_ip = dns_lookup(&vec![RESOLVER_ADDRESS], LOOKUP_HOSTNAME);
+    let current_ip = dns_lookup(&[RESOLVER_ADDRESS], LOOKUP_HOSTNAME);
     let lookup_ip = dns_lookup(CLOUDFLARE_IPS, record_name);
-    if &current_ip == &lookup_ip {
+    if current_ip == lookup_ip {
         info!("DNS record for {} ({}) is up to date",
             record_name,
             &lookup_ip.unwrap())
@@ -195,14 +196,12 @@ fn dns_lookup(resolvers: &[IpAddr], hostname: &str) -> Option<Ipv4Addr> {
 fn get_vault_token() -> Result<String, ureq::Error> {
     let jwt_token_path = env::var("JWT_TOKEN_PATH").ok();
     let jwt_token_path = jwt_token_path
-        .as_ref()
-        .map(String::as_str)
+        .as_deref()
         .and_then(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(JWT_TOKEN_PATH);
     let vault_addr = env::var("VAULT_ADDR").ok();
     let vault_addr = vault_addr
-        .as_ref()
-        .map(String::as_str)
+        .as_deref()
         .and_then(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(VAULT_ADDR);
     let jwt = fs::read_to_string(jwt_token_path)?;
@@ -223,8 +222,7 @@ fn get_vault_token() -> Result<String, ureq::Error> {
 fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
     let vault_addr = env::var("VAULT_ADDR").ok();
     let vault_addr = vault_addr
-        .as_ref()
-        .map(String::as_str)
+        .as_deref()
         .and_then(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(VAULT_ADDR);
     let vault_secret_endpoint = format!("{0}/v1/ocp/cf-dyn-dns/data/cf-api", vault_addr);
@@ -250,7 +248,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             Environment::Production,
         ).unwrap();
 
-        dns(&config.zone, &config.record, &api_client);
+        dns(config.zone, config.record, &api_client);
 
         thread::sleep(Duration::from_secs(120))
     }
