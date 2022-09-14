@@ -6,7 +6,8 @@ use env_logger::Builder;
 use log::{error, LevelFilter};
 use cf_dns_record_update::{Config, LogMessage};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     let config = Config::new(&args).unwrap_or_else(|err| {
         error!("Failed to parse arguments: {}", err);
@@ -24,10 +25,10 @@ fn main() {
                 serde_json::to_string(&log_message).unwrap()
             )
         })
-        .filter(None, LevelFilter::Info)
+        .filter(None, LevelFilter::Warn)
         .init();
 
-    if let Err(e) = cf_dns_record_update::run(config) {
+    if let Err(e) = cf_dns_record_update::run(config).await {
         println!("Application error: {}", e);
         process::exit(1);
     }

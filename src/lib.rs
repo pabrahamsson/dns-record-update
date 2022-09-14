@@ -1,31 +1,43 @@
 #![allow(clippy::redundant_field_names)]
 extern crate cloudflare;
 extern crate env_logger;
-extern crate trust_dns_resolver;
 extern crate ureq;
 
 use std::{
     env,
     fs,
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     thread,
     time::Duration,
 };
 use cloudflare::endpoints::{dns, zone};
 use cloudflare::framework::{
-    apiclient::ApiClient,
+    async_api::{Client as CFClient},
     auth::Credentials,
     response::ApiFailure,
-    Environment, HttpApiClient, HttpApiClientConfig,
+    Environment, HttpApiClientConfig,
 };
-use log::{info, warn};
+use log::{debug, info, warn};
+use rsdns::{
+    constants::Class,
+    records::data::A,
+    clients::{
+        tokio::Client,
+        ClientConfig,
+    }
+};
 use serde::{Deserialize, Serialize};
-use trust_dns_resolver::config::*;
-use trust_dns_resolver::Resolver;
+use vaultrs::{
+    auth::kubernetes::login,
+    client::{Client as VCClient, VaultClient, VaultClientSettingsBuilder},
+    error::ClientError,
+    token,
+};
 
 const JWT_TOKEN_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 const LOOKUP_HOSTNAME: &str = "myip.opendns.com";
 const RESOLVER_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222));
+const CF_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(1,0,0,1));
 const VAULT_ADDR: &str = "http://vault.vault.svc:8200";
 
 pub struct Config<'a> {
@@ -55,6 +67,18 @@ pub struct LogMessage {
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
+struct VaultToken {
+    ttl: u64,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct Token {
+    data: VaultToken,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
 struct VaultAuth {
     client_token: String,
 }
@@ -74,7 +98,7 @@ struct VaultKV2Data {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 struct VaultKV2 {
-    data: VaultKV2Data,
+    key: String
 }
 
 /*
@@ -83,7 +107,13 @@ fn print_type_of<T>(_: &T) {
 }
 */
 
-fn handle_cf_error(api_failure: &ApiFailure) {
+async fn set_default_env_var(key: &str, value: &str) {
+    if env::var(key).is_err() {
+        env::set_var(key, value);
+    }
+}
+
+async fn handle_cf_error(api_failure: &ApiFailure) {
     match api_failure {
         ApiFailure::Error(status, errors) => {
             warn!("HTTP {}:", status);
@@ -101,13 +131,13 @@ fn handle_cf_error(api_failure: &ApiFailure) {
     }
 }
 
-fn get_zone_id<ApiClientType: ApiClient>(zone_name: &str, api_client: &ApiClientType) -> Option<String> {
-    let response = api_client.request(&zone::ListZones {
+async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
+    let response = api_client.request_handle(&zone::ListZones {
         params: zone::ListZonesParams {
             name: Some(zone_name.to_string()),
             ..Default::default()
         },
-    });
+    }).await;
     match response {
         Ok(records) => {
             if records.result.len() == 1 {
@@ -117,20 +147,20 @@ fn get_zone_id<ApiClientType: ApiClient>(zone_name: &str, api_client: &ApiClient
             }
         }
         Err(e) => {
-            handle_cf_error(&e);
+            handle_cf_error(&e).await;
             None
         }
     }
 }
 
-fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifier: &str, api_client: &ApiClientType) -> Option<String> {
-    let response = api_client.request(&dns::ListDnsRecords {
+async fn get_current_record(record_name: &str, zone_identifier: &str, api_client: &CFClient) -> Option<String> {
+    let response = api_client.request_handle(&dns::ListDnsRecords {
         zone_identifier,
         params: dns::ListDnsRecordsParams {
             name: Some(record_name.to_string()),
             ..Default::default()
         },
-    });
+    }).await;
     match response {
         Ok(records) => {
             if records.result.len() == 1 {
@@ -140,115 +170,125 @@ fn get_current_record<ApiClientType: ApiClient>(record_name: &str, zone_identifi
             }
         }
         Err(e) => {
-            handle_cf_error(&e);
+            handle_cf_error(&e).await;
             None
         }
     }
 }
 
-fn update_record<ApiClientType: ApiClient>(record_identifier: &str, zone_identifier: &str, name: &str, address: &Option<Ipv4Addr>, api_client: &ApiClientType) -> Option<()> {
-    let response = api_client.request(&dns::UpdateDnsRecord {
+async fn update_record(record_identifier: &str, zone_identifier: &str, name: &str, address: &Ipv4Addr, api_client: &CFClient) -> Option<()> {
+    let response = api_client.request_handle(&dns::UpdateDnsRecord {
         zone_identifier: zone_identifier,
         identifier: record_identifier,
         params: dns::UpdateDnsRecordParams {
             ttl: Some(60),
             proxied: None,
             name: name,
-            content: dns::DnsContent::A { content: address.unwrap() },
+            content: dns::DnsContent::A { content: *address },
         },
-    });
+    }).await;
     match response {
         Ok(_) => Some(()),
         Err(e) => {
-            handle_cf_error(&e);
+            handle_cf_error(&e).await;
             None
         }
     }
 }
 
-fn dns<ApiClientType: ApiClient>(zone_name: &str, record_name: &str, api_client: &ApiClientType) {
-    let current_ip = dns_lookup(&[RESOLVER_ADDRESS], LOOKUP_HOSTNAME);
-    let lookup_ip = dns_lookup(CLOUDFLARE_IPS, record_name);
+async fn dns(zone_name: &str, record_name: &str, api_client: &CFClient) {
+    let current_ip = dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME).await.unwrap();
+    let lookup_ip = dns_lookup(CF_ADDRESS, record_name).await.unwrap();
     if current_ip == lookup_ip {
         info!("DNS record for {} ({}) is up to date",
             record_name,
-            &lookup_ip.unwrap())
+            &lookup_ip)
     } else {
         info!("DNS record for {} ({} ==> {}) will be updated",
             record_name,
-            &lookup_ip.unwrap(),
-            &current_ip.unwrap());
-        let zone_identifier = get_zone_id(zone_name, api_client).unwrap();
-        let record_id = get_current_record(record_name, &zone_identifier, api_client).unwrap();
-        update_record(&record_id, &zone_identifier, record_name, &current_ip, api_client);
+            &lookup_ip,
+            &current_ip);
+        let zone_identifier = get_zone_id(zone_name, api_client).await.unwrap();
+        let record_id = get_current_record(record_name, &zone_identifier, api_client).await.unwrap();
+        update_record(&record_id, &zone_identifier, record_name, &current_ip, api_client).await;
     }
 }
 
-fn dns_lookup(resolvers: &[IpAddr], hostname: &str) -> Option<Ipv4Addr> {
-    let name_server_config_group = NameServerConfigGroup::from_ips_clear(resolvers, 53, true);
-    let resolver_config = ResolverConfig::from_parts(None, [].to_vec(), name_server_config_group);
-    let resolver = Resolver::new(resolver_config, ResolverOpts::default()).ok()?;
-    let response = resolver.ipv4_lookup(hostname).ok()?;
-    let address = response.iter().next().expect("no address found");
-    Some(*address)
+async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Result<Ipv4Addr, Box<dyn std::error::Error>> {
+    let nameserver = SocketAddr::new(resolver, 53);
+    let config = ClientConfig::with_nameserver(nameserver);
+    let mut client = Client::new(config).await?;
+    let rrset = client.query_rrset::<A>(hostname, Class::In).await?;
+    debug!("A record: {}", rrset.rdata[0].address);
+    Ok(rrset.rdata[0].address)
 }
 
-fn get_vault_token() -> Result<String, ureq::Error> {
-    let jwt_token_path = env::var("JWT_TOKEN_PATH").ok();
-    let jwt_token_path = jwt_token_path
-        .as_deref()
-        .and_then(|s| if s.is_empty() { None } else { Some(s) })
-        .unwrap_or(JWT_TOKEN_PATH);
-    let vault_addr = env::var("VAULT_ADDR").ok();
-    let vault_addr = vault_addr
-        .as_deref()
-        .and_then(|s| if s.is_empty() { None } else { Some(s) })
-        .unwrap_or(VAULT_ADDR);
-    let jwt = fs::read_to_string(jwt_token_path)?;
+async fn get_vault_client_with_token(client: &mut VaultClient) -> Result<&mut VaultClient, ClientError> {
+    set_default_env_var("JWT_TOKEN_PATH", JWT_TOKEN_PATH).await;
+    let jwt_token_path = env::var("JWT_TOKEN_PATH").unwrap();
+    let jwt = fs::read_to_string(jwt_token_path).unwrap();
     let mount = "ocp/cf-dyn-dns-k8s";
     let role = "cf-dyn-dns-secret-reader";
-    let vault_login_endpoint = format!("{0}/v1/auth/{1}/login", vault_addr, mount);
-    let response: Lease = ureq::post(&vault_login_endpoint)
-        .set("X-Vault-Request", "true")
-        .send_json(ureq::json!({
-            "role": role,
-            "jwt": jwt
-        }))?
-        .into_json()?;
-
-    Ok(response.auth.client_token)
+    match login(client, &mount, &role, &jwt).await {
+        Ok(response) => {
+            client.set_token(&response.client_token);
+            Ok(client)
+        },
+        Err(e) => Err(e),
+    }
 }
 
-fn get_cf_api_key(token: &str) -> Result<String, ureq::Error> {
-    let vault_addr = env::var("VAULT_ADDR").ok();
-    let vault_addr = vault_addr
-        .as_deref()
-        .and_then(|s| if s.is_empty() { None } else { Some(s) })
-        .unwrap_or(VAULT_ADDR);
-    let vault_secret_endpoint = format!("{0}/v1/ocp/cf-dyn-dns/data/cf-api", vault_addr);
-    let response: VaultKV2 = ureq::get(&vault_secret_endpoint)
-        .set("X-Vault-Token", token)
-        .call()?
-        .into_json()?;
-    Ok(response.data.data["key"].to_string())
+async fn get_token_ttl(client: &VaultClient) -> Result<u64, vaultrs::error::ClientError> {
+    match token::lookup_self(client).await {
+        Ok(self_token) => Ok(self_token.ttl),
+        Err(e) => {
+            //handle_cf_error(&e).await;
+            warn!("renew_vault_lease: {}", e);
+            Err(e)
+        }
+    }
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn get_cf_api_key(client: &VaultClient) -> Result<String, ClientError> {
+    let response: VaultKV2 = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "cf-api").await.unwrap();
+    Ok(response.key)
+}
+
+pub async fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error>> {
+    set_default_env_var("VAULT_ADDR", VAULT_ADDR).await;
+    let vault_addr = env::var("VAULT_ADDR").unwrap();
+    let mut vault_client = VaultClient::new(
+        VaultClientSettingsBuilder::default()
+            .address(&vault_addr)
+            .verify(true)
+            .build()
+            .unwrap()
+    ).unwrap();
+    let mut vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
     loop {
-        let vault_token = get_vault_token().expect("Failed to get Vault token");
-        let cf_key = get_cf_api_key(&vault_token).expect("Failed to get CF api key");
+        match get_token_ttl(&vault_client_with_token).await {
+            Ok(ttl) => {
+                if ttl < 120 {
+                    vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
+                }
+            },
+            Err(_) => {
+                vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
+            },
+        }
+        let cf_key = get_cf_api_key(&vault_client_with_token).await.expect("Failed to get CF api key");
 
         let credentials: Credentials = Credentials::UserAuthToken {
             token: cf_key.trim_matches('"').to_string(),
         };
 
-        let api_client = HttpApiClient::new(
+        let api_client = CFClient::new(
             credentials,
             HttpApiClientConfig::default(),
             Environment::Production,
         ).unwrap();
 
-        dns(config.zone, config.record, &api_client);
+        dns(config.zone, config.record, &api_client).await;
 
         thread::sleep(Duration::from_secs(120))
     }
