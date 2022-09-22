@@ -140,7 +140,7 @@ async fn handle_cf_error(api_failure: &ApiFailure) {
 async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
     let tracer = global::tracer("get_zone_id");
     let mut span = tracer.start("Looking up dns zone...");
-    span.set_attribute(KeyValue::new("dns.zone", format!("{}", zone_name)));
+    span.set_attribute(KeyValue::new("dns.zone", zone_name.to_string()));
     let cx = Context::current_with_span(span);
 
     let response = api_client.request_handle(&zone::ListZones {
@@ -167,8 +167,8 @@ async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
 async fn get_current_record(record_name: &str, zone_identifier: &str, api_client: &CFClient) -> Option<String> {
     let tracer = global::tracer("get_current_record");
     let mut span = tracer.start("Looking up current record...");
-    span.set_attribute(KeyValue::new("dns.record", format!("{}", record_name)));
-    span.set_attribute(KeyValue::new("dns.zone", format!("{}", zone_identifier)));
+    span.set_attribute(KeyValue::new("dns.record",  record_name.to_string()));
+    span.set_attribute(KeyValue::new("dns.zone", zone_identifier.to_string()));
     let cx = Context::current_with_span(span);
 
     let response = api_client.request_handle(&dns::ListDnsRecords {
@@ -196,8 +196,8 @@ async fn get_current_record(record_name: &str, zone_identifier: &str, api_client
 async fn update_record(record_identifier: &str, zone_identifier: &str, name: &str, address: &Ipv4Addr, api_client: &CFClient) -> Option<()> {
     let tracer = global::tracer("update_record");
     let mut span = tracer.start("Updating record...");
-    span.set_attribute(KeyValue::new("dns.address", format!("{}", address)));
-    span.set_attribute(KeyValue::new("dns.name", format!("{}", name)));
+    span.set_attribute(KeyValue::new("dns.address", address.to_string()));
+    span.set_attribute(KeyValue::new("dns.name", name.to_string()));
     let cx = Context::current_with_span(span);
 
     let response = api_client.request_handle(&dns::UpdateDnsRecord {
@@ -263,8 +263,8 @@ async fn dns(zone_name: &str, record_name: &str, cf_credentials: Credentials) {
 async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
     let tracer = global::tracer("dns_lookup");
     let mut span = tracer.start("Getting current dns address...");
-    span.set_attribute(KeyValue::new("dns.hostname", format!("{}", hostname)));
-    span.set_attribute(KeyValue::new("dns.resolver", format!("{}", resolver)));
+    span.set_attribute(KeyValue::new("dns.hostname", hostname.to_string()));
+    span.set_attribute(KeyValue::new("dns.resolver", resolver.to_string()));
     let cx = Context::current_with_span(span);
 
     let nameserver = SocketAddr::new(resolver, 53);
@@ -280,7 +280,7 @@ async fn get_vault_client_with_token(client: &mut VaultClient) -> Result<&mut Va
     let span = tracer.start("Getting vault client...");
     let cx = Context::current_with_span(span);
 
-    if client.settings.token.is_empty() || (get_token_ttl(&client).with_context(cx).await.unwrap() < 120) {
+    if client.settings.token.is_empty() || (get_token_ttl(client).with_context(cx).await.unwrap() < 120) {
         info!("Creating Vault client with token");
 
         set_default_env_var("JWT_TOKEN_PATH", JWT_TOKEN_PATH).await;
@@ -288,7 +288,7 @@ async fn get_vault_client_with_token(client: &mut VaultClient) -> Result<&mut Va
         let jwt = fs::read_to_string(jwt_token_path).unwrap();
         let mount = "ocp/cf-dyn-dns-k8s";
         let role = "cf-dyn-dns-secret-reader";
-        match login(client, &mount, &role, &jwt).await {
+        match login(client, mount, role, &jwt).await {
             Ok(response) => {
                 client.set_token(&response.client_token);
                 Ok(client)
@@ -360,7 +360,7 @@ pub async fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error + S
             .await
             .expect("Failed to get Vault client");
 
-        let cf_credentials = create_cf_credential(&vault_client_with_token)
+        let cf_credentials = create_cf_credential(vault_client_with_token)
             .with_context(cx.clone())
             .await
             .expect("sdkfjaskf");
