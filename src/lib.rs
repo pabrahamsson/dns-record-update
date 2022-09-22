@@ -1,7 +1,6 @@
 #![allow(clippy::redundant_field_names)]
 extern crate cloudflare;
 extern crate env_logger;
-extern crate ureq;
 
 use std::{
     env,
@@ -18,6 +17,13 @@ use cloudflare::framework::{
     Environment, HttpApiClientConfig,
 };
 use log::{debug, info, warn};
+use opentelemetry::{
+    Context,
+    global,
+    KeyValue,
+    sdk::trace as sdktrace,
+    trace::{FutureExt, Span, TraceContextExt, Tracer, TraceError},
+};
 use rsdns::{
     constants::Class,
     records::data::A,
@@ -132,12 +138,17 @@ async fn handle_cf_error(api_failure: &ApiFailure) {
 }
 
 async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
+    let tracer = global::tracer("get_zone_id");
+    let mut span = tracer.start("Looking up dns zone...");
+    span.set_attribute(KeyValue::new("dns.zone", format!("{}", zone_name)));
+    let cx = Context::current_with_span(span);
+
     let response = api_client.request_handle(&zone::ListZones {
         params: zone::ListZonesParams {
             name: Some(zone_name.to_string()),
             ..Default::default()
         },
-    }).await;
+    }).with_context(cx).await;
     match response {
         Ok(records) => {
             if records.result.len() == 1 {
@@ -154,13 +165,19 @@ async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
 }
 
 async fn get_current_record(record_name: &str, zone_identifier: &str, api_client: &CFClient) -> Option<String> {
+    let tracer = global::tracer("get_current_record");
+    let mut span = tracer.start("Looking up current record...");
+    span.set_attribute(KeyValue::new("dns.record", format!("{}", record_name)));
+    span.set_attribute(KeyValue::new("dns.zone", format!("{}", zone_identifier)));
+    let cx = Context::current_with_span(span);
+
     let response = api_client.request_handle(&dns::ListDnsRecords {
         zone_identifier,
         params: dns::ListDnsRecordsParams {
             name: Some(record_name.to_string()),
             ..Default::default()
         },
-    }).await;
+    }).with_context(cx).await;
     match response {
         Ok(records) => {
             if records.result.len() == 1 {
@@ -177,6 +194,12 @@ async fn get_current_record(record_name: &str, zone_identifier: &str, api_client
 }
 
 async fn update_record(record_identifier: &str, zone_identifier: &str, name: &str, address: &Ipv4Addr, api_client: &CFClient) -> Option<()> {
+    let tracer = global::tracer("update_record");
+    let mut span = tracer.start("Updating record...");
+    span.set_attribute(KeyValue::new("dns.address", format!("{}", address)));
+    span.set_attribute(KeyValue::new("dns.name", format!("{}", name)));
+    let cx = Context::current_with_span(span);
+
     let response = api_client.request_handle(&dns::UpdateDnsRecord {
         zone_identifier: zone_identifier,
         identifier: record_identifier,
@@ -186,7 +209,7 @@ async fn update_record(record_identifier: &str, zone_identifier: &str, name: &st
             name: name,
             content: dns::DnsContent::A { content: *address },
         },
-    }).await;
+    }).with_context(cx).await;
     match response {
         Ok(_) => Some(()),
         Err(e) => {
@@ -196,9 +219,32 @@ async fn update_record(record_identifier: &str, zone_identifier: &str, name: &st
     }
 }
 
-async fn dns(zone_name: &str, record_name: &str, api_client: &CFClient) {
-    let current_ip = dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME).await.unwrap();
-    let lookup_ip = dns_lookup(CF_ADDRESS, record_name).await.unwrap();
+async fn create_cf_api_client(credentials: Credentials) -> CFClient {
+    let tracer = global::tracer("create_cf_api_client");
+    let mut span = tracer.start("Create CF API Client...");
+
+    let api_client = CFClient::new(
+        credentials,
+        HttpApiClientConfig::default(),
+        Environment::Production,
+    ).unwrap();
+    span.end();
+    api_client
+}
+
+async fn dns(zone_name: &str, record_name: &str, cf_credentials: Credentials) {
+    let tracer = global::tracer("dns");
+    let span = tracer.start("Dns logic...");
+    let cx = Context::current_with_span(span);
+
+    let api_client = create_cf_api_client(cf_credentials)
+        .with_context(cx.clone())
+        .await;
+
+    let (current_ip, lookup_ip) = futures_util::future::join(dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME), dns_lookup(CF_ADDRESS, record_name))
+        .with_context(cx.clone())
+        .await;
+
     if current_ip == lookup_ip {
         info!("DNS record for {} ({}) is up to date",
             record_name,
@@ -208,38 +254,58 @@ async fn dns(zone_name: &str, record_name: &str, api_client: &CFClient) {
             record_name,
             &lookup_ip,
             &current_ip);
-        let zone_identifier = get_zone_id(zone_name, api_client).await.unwrap();
-        let record_id = get_current_record(record_name, &zone_identifier, api_client).await.unwrap();
-        update_record(&record_id, &zone_identifier, record_name, &current_ip, api_client).await;
+        let zone_identifier = get_zone_id(zone_name, &api_client).with_context(cx.clone()).await.unwrap();
+        let record_id = get_current_record(record_name, &zone_identifier, &api_client).with_context(cx.clone()).await.unwrap();
+        update_record(&record_id, &zone_identifier, record_name, &current_ip, &api_client).with_context(cx.clone()).await;
     }
 }
 
-async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Result<Ipv4Addr, Box<dyn std::error::Error>> {
+async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
+    let tracer = global::tracer("dns_lookup");
+    let mut span = tracer.start("Getting current dns address...");
+    span.set_attribute(KeyValue::new("dns.hostname", format!("{}", hostname)));
+    span.set_attribute(KeyValue::new("dns.resolver", format!("{}", resolver)));
+    let cx = Context::current_with_span(span);
+
     let nameserver = SocketAddr::new(resolver, 53);
     let config = ClientConfig::with_nameserver(nameserver);
-    let mut client = Client::new(config).await?;
-    let rrset = client.query_rrset::<A>(hostname, Class::In).await?;
+    let mut client = Client::new(config).await.unwrap();
+    let rrset = client.query_rrset::<A>(hostname, Class::In).with_context(cx).await.unwrap();
     debug!("A record: {}", rrset.rdata[0].address);
-    Ok(rrset.rdata[0].address)
+    rrset.rdata[0].address
 }
 
 async fn get_vault_client_with_token(client: &mut VaultClient) -> Result<&mut VaultClient, ClientError> {
-    set_default_env_var("JWT_TOKEN_PATH", JWT_TOKEN_PATH).await;
-    let jwt_token_path = env::var("JWT_TOKEN_PATH").unwrap();
-    let jwt = fs::read_to_string(jwt_token_path).unwrap();
-    let mount = "ocp/cf-dyn-dns-k8s";
-    let role = "cf-dyn-dns-secret-reader";
-    match login(client, &mount, &role, &jwt).await {
-        Ok(response) => {
-            client.set_token(&response.client_token);
-            Ok(client)
-        },
-        Err(e) => Err(e),
+    let tracer = global::tracer("vault_token_with_client");
+    let span = tracer.start("Getting vault client...");
+    let cx = Context::current_with_span(span);
+
+    if client.settings.token.is_empty() || (get_token_ttl(&client).with_context(cx).await.unwrap() < 120) {
+        info!("Creating Vault client with token");
+
+        set_default_env_var("JWT_TOKEN_PATH", JWT_TOKEN_PATH).await;
+        let jwt_token_path = env::var("JWT_TOKEN_PATH").unwrap();
+        let jwt = fs::read_to_string(jwt_token_path).unwrap();
+        let mount = "ocp/cf-dyn-dns-k8s";
+        let role = "cf-dyn-dns-secret-reader";
+        match login(client, &mount, &role, &jwt).await {
+            Ok(response) => {
+                client.set_token(&response.client_token);
+                Ok(client)
+            },
+            Err(e) => Err(e),
+        }
+    } else {
+        Ok(client)
     }
 }
 
 async fn get_token_ttl(client: &VaultClient) -> Result<u64, vaultrs::error::ClientError> {
-    match token::lookup_self(client).await {
+    let tracer = global::tracer("get_token_ttl");
+    let span = tracer.start("Getting vault token ttl...");
+    let cx = Context::current_with_span(span);
+
+    match token::lookup_self(client).with_context(cx).await {
         Ok(self_token) => Ok(self_token.ttl),
         Err(e) => {
             //handle_cf_error(&e).await;
@@ -249,12 +315,32 @@ async fn get_token_ttl(client: &VaultClient) -> Result<u64, vaultrs::error::Clie
     }
 }
 
-async fn get_cf_api_key(client: &VaultClient) -> Result<String, ClientError> {
-    let response: VaultKV2 = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "cf-api").await.unwrap();
-    Ok(response.key)
+async fn create_cf_credential(client: &VaultClient) -> Result<Credentials, ClientError> {
+    let tracer = global::tracer("create_cf_credential");
+    let span = tracer.start("Creating CF api credentials...");
+    let cx = Context::current_with_span(span);
+
+    let response: VaultKV2 = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "cf-api").with_context(cx).await.unwrap();
+    let credentials: Credentials = Credentials::UserAuthToken {
+        token: response.key.trim_matches('"').to_string(),
+    };
+    Ok(credentials)
 }
 
-pub async fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error>> {
+fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
+    opentelemetry_jaeger::new_agent_pipeline()
+        .with_service_name("cf-dyn-dns")
+        .install_simple()
+        /*
+        .with_batch_processor_config(
+            sdktrace::BatchConfig::default().with_max_queue_size(10)
+        )
+        .install_batch(opentelemetry::runtime::Tokio)
+        */
+}
+
+pub async fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+
     set_default_env_var("VAULT_ADDR", VAULT_ADDR).await;
     let vault_addr = env::var("VAULT_ADDR").unwrap();
     let mut vault_client = VaultClient::new(
@@ -264,32 +350,26 @@ pub async fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error>> {
             .build()
             .unwrap()
     ).unwrap();
-    let mut vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
+
     loop {
-        match get_token_ttl(&vault_client_with_token).await {
-            Ok(ttl) => {
-                if ttl < 120 {
-                    vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
-                }
-            },
-            Err(_) => {
-                vault_client_with_token = get_vault_client_with_token(&mut vault_client).await.expect("Failed to get Vault client with token");
-            },
-        }
-        let cf_key = get_cf_api_key(&vault_client_with_token).await.expect("Failed to get CF api key");
+        let tracer = init_tracer()?;
+        let span = tracer.start("root");
+        let cx = Context::current_with_span(span);
+        let vault_client_with_token = get_vault_client_with_token(&mut vault_client)
+            .with_context(cx.clone())
+            .await
+            .expect("Failed to get Vault client");
 
-        let credentials: Credentials = Credentials::UserAuthToken {
-            token: cf_key.trim_matches('"').to_string(),
-        };
+        let cf_credentials = create_cf_credential(&vault_client_with_token)
+            .with_context(cx.clone())
+            .await
+            .expect("sdkfjaskf");
 
-        let api_client = CFClient::new(
-            credentials,
-            HttpApiClientConfig::default(),
-            Environment::Production,
-        ).unwrap();
+        dns(config.zone, config.record, cf_credentials)
+            .with_context(cx)
+            .await;
 
-        dns(config.zone, config.record, &api_client).await;
-
-        thread::sleep(Duration::from_secs(120))
+        thread::sleep(Duration::from_secs(120));
+        global::shutdown_tracer_provider();
     }
 }
