@@ -160,7 +160,7 @@ dependencies = [
  "rsdns",
  "serde",
  "serde_json",
- "thrift 0.13.0",
+ "thrift",
  "tokio",
  "vaultrs",
 ]
@@ -824,12 +824,6 @@ dependencies = [
 
 [[package]]
 name = "integer-encoding"
-version = "1.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48dc51180a9b377fd75814d0cc02199c20f8e99433d6762f650d39cdbbd3b56f"
-
-[[package]]
-name = "integer-encoding"
 version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
@@ -1049,7 +1043,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "thiserror",
- "thrift 0.16.0",
+ "thrift",
  "tokio",
 ]
 
@@ -1749,25 +1743,12 @@ dependencies = [
 
 [[package]]
 name = "thrift"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c6d965454947cc7266d22716ebfd07b18d84ebaf35eec558586bbb2a8cb6b5b"
-dependencies = [
- "byteorder",
- "integer-encoding 1.1.7",
- "log",
- "ordered-float",
- "threadpool",
-]
-
-[[package]]
-name = "thrift"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09678c4cdbb4eed72e18b7c2af1329c69825ed16fcbac62d083fc3e2b0590ff0"
 dependencies = [
  "byteorder",
- "integer-encoding 3.0.4",
+ "integer-encoding",
  "log",
  "ordered-float",
  "threadpool",
