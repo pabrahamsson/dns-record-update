@@ -19,5 +19,5 @@ rsdns = { version = "0.13.1", features = ["net-tokio"] }
 serde = { version = "1.0.145" }
 serde_json = "1.0.74"
 thrift =  "0.16"
-tokio = { version = "1.21.1", features = ["rt", "net", "macros"] }
+tokio = { version = "1.21.2", features = ["rt", "net", "macros"] }
 vaultrs = "0.6.2"
