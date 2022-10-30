@@ -245,7 +245,7 @@ async fn create_cf_api_client(credentials: Credentials) -> CFClient {
     api_client
 }
 
-async fn dns(zone_name: &str, record_name: &str, cf_credentials: Credentials) {
+async fn dns(zone_name: &str, record_name: &str, vault_client: &mut VaultClient) {
     let tracer = global::tracer("dns");
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
@@ -267,6 +267,10 @@ async fn dns(zone_name: &str, record_name: &str, cf_credentials: Credentials) {
             "DNS record for {} ({} ==> {}) will be updated",
             record_name, &lookup_ip, &current_ip
         );
+        let cf_credentials = create_cf_credential(vault_client)
+            .with_context(cx.clone())
+            .await
+            .expect("Failed to create CF credentials");
         let api_client = create_cf_api_client(cf_credentials)
             .with_context(cx.clone())
             .await;
@@ -317,7 +321,7 @@ async fn get_vault_client_with_token(
     let cx = Context::current_with_span(span);
 
     if client.settings.token.is_empty()
-        || (get_token_ttl(client).with_context(cx).await.unwrap() < 120)
+        || (get_token_ttl(client).with_context(cx.clone()).await.unwrap() < 120)
     {
         info!("Creating Vault client with token");
 
@@ -326,7 +330,7 @@ async fn get_vault_client_with_token(
         let jwt = fs::read_to_string(jwt_token_path).unwrap();
         let mount = "ocp/cf-dyn-dns-k8s";
         let role = "cf-dyn-dns-secret-reader";
-        match login(client, mount, role, &jwt).await {
+        match login(client, mount, role, &jwt).with_context(cx.clone()).await {
             Ok(response) => {
                 client.set_token(&response.client_token);
                 Ok(client)
@@ -346,7 +350,6 @@ async fn get_token_ttl(client: &VaultClient) -> Result<u64, vaultrs::error::Clie
     match token::lookup_self(client).with_context(cx).await {
         Ok(self_token) => Ok(self_token.ttl),
         Err(e) => {
-            //handle_cf_error(&e).await;
             warn!("renew_vault_lease: {}", e);
             Err(e)
         }
@@ -403,12 +406,7 @@ pub async fn run(
             .await
             .expect("Failed to get Vault client");
 
-        let cf_credentials = create_cf_credential(vault_client_with_token)
-            .with_context(cx.clone())
-            .await
-            .expect("sdkfjaskf");
-
-        dns(config.zone, config.record, cf_credentials)
+        dns(config.zone, config.record, vault_client_with_token)
             .with_context(cx)
             .await;
 
