@@ -9,7 +9,7 @@ edition = "2021"
 chrono = "0.4.19"
 chrono-tz = "0.8.0"
 cloudflare = "0.9.1"
-env_logger = "0.9.1"
+env_logger = "0.9.3"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 log = "0.4.0"
 openssl = { version = "0.10.42", features = ["vendored"] }
