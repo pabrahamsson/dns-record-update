@@ -4,7 +4,8 @@ use std::{env, io::Write, process};
 use chrono::Local;
 use env_logger::Builder;
 use log::{error, LevelFilter};
-use cf_dns_record_update::{Config, LogMessage};
+use dns_record_update::{Config, LogMessage};
+use tokio::{signal::unix::{signal, SignalKind}};
 
 #[tokio::main]
 async fn main() {
@@ -28,8 +29,24 @@ async fn main() {
         .filter(None, LevelFilter::Warn)
         .init();
 
-    if let Err(e) = cf_dns_record_update::run(config).await {
+    if let Err(e) = dns_record_update::run(config).await {
         println!("Application error: {}", e);
         process::exit(1);
+    };
+
+    match signal(SignalKind::terminate()) {
+        Ok(_) => {},
+        Err(err) => {
+            eprintln!("Unable to listen for shutdown signal: {}", err);
+        },
     }
+    /*
+    tokio::select! {
+        _ = signal(SignalKind::terminate()) => {
+            process::exit(0);
+        },
+        _ = shutdown_recv.recv() => {},
+    }
+    */
+
 }

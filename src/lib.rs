@@ -1,12 +1,9 @@
 #![allow(clippy::redundant_field_names)]
-extern crate cloudflare;
 extern crate env_logger;
+extern crate google_dns1 as dns1;
 
-use cloudflare::endpoints::{dns, zone};
-use cloudflare::framework::{
-    async_api::Client as CFClient, auth::Credentials, response::ApiFailure, Environment,
-    HttpApiClientConfig,
-};
+use dns1::{api::ResourceRecordSet, Dns, Error as CDError, hyper, hyper_rustls, oauth2};
+use http::StatusCode;
 use log::{debug, info, warn};
 use opentelemetry::{
     global,
@@ -35,24 +32,26 @@ use vaultrs::{
 const JWT_TOKEN_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 const LOOKUP_HOSTNAME: &str = "myip.opendns.com";
 const RESOLVER_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222));
-const CF_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1));
+const DNS_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4));
 const VAULT_ADDR: &str = "http://vault.vault.svc:8200";
 
 pub struct Config<'a> {
+    project: &'a str,
     zone: &'a str,
     record: &'a str,
 }
 
 impl<'a> Config<'a> {
     pub fn new(args: &[String]) -> Result<Config, &str> {
-        if args.len() != 3 {
+        if args.len() != 4 {
             return Err("Incorrect number of arguments");
         }
 
-        let zone = &args[1];
-        let record = &args[2];
+        let project =&args[1];
+        let zone = &args[2];
+        let record = &args[3];
 
-        Ok(Config { zone, record })
+        Ok(Config { project, zone, record })
     }
 }
 
@@ -95,8 +94,8 @@ struct VaultKV2Data {
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
-struct VaultKV2 {
-    key: String,
+struct CloudDnsServiceAccount {
+    serviceaccount: String,
 }
 
 /*
@@ -105,153 +104,101 @@ fn print_type_of<T>(_: &T) {
 }
 */
 
-async fn handle_cf_error(api_failure: &ApiFailure) {
-    match api_failure {
-        ApiFailure::Error(status, errors) => {
-            warn!("HTTP {}:", status);
-            for err in &errors.errors {
-                warn!("Error {}: {}", err.code, err.message);
-                for (k, v) in &err.other {
-                    warn!("{}: {}", k, v);
-                }
-            }
-            for (k, v) in &errors.other {
-                warn!("{}: {}", k, v);
-            }
-        }
-        ApiFailure::Invalid(reqwest_err) => warn!("Error: {}", reqwest_err),
-    }
-}
-
-async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
-    let tracer = global::tracer("get_zone_id");
-    let mut span = tracer.start("Looking up dns zone...");
-    span.set_attribute(KeyValue::new("dns.zone", zone_name.to_string()));
-    let cx = Context::current_with_span(span);
-
-    match api_client
-        .request_handle(&zone::ListZones {
-            params: zone::ListZonesParams {
-                name: Some(zone_name.to_string()),
-                ..Default::default()
-            },
-        })
-        .with_context(cx)
-        .await {
-            Ok(records) => {
-                if records.result.len() == 1 {
-                    Some(records.result[0].id.clone())
-                } else {
-                    panic!("No zone found for: {zone_name}")
-                }
-            }
-            Err(e) => {
-                handle_cf_error(&e).await;
-                None
-            }
-    }
-}
-
-async fn get_current_record(
-    record_name: &str,
+async fn get_record_set(
+    project: &str,
     zone_identifier: &str,
-    api_client: &CFClient,
-) -> Option<String> {
-    let tracer = global::tracer("get_current_record");
-    let mut span = tracer.start("Looking up current record...");
+    record_name: &str,
+    api_client: &Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>,
+) -> Result<ResourceRecordSet, CDError> {
+    let tracer = global::tracer("get_record_set");
+    let mut span = tracer.start("Looking up record_set...");
     span.set_attribute(KeyValue::new("dns.record", record_name.to_string()));
     span.set_attribute(KeyValue::new("dns.zone", zone_identifier.to_string()));
     let cx = Context::current_with_span(span);
 
     match api_client
-        .request_handle(&dns::ListDnsRecords {
-            zone_identifier,
-            params: dns::ListDnsRecordsParams {
-                name: Some(record_name.to_string()),
-                ..Default::default()
-            },
-        })
+        .resource_record_sets()
+        .get(project, zone_identifier, record_name, "A")
+        .doit()
         .with_context(cx)
         .await {
-            Ok(records) => {
-                if records.result.len() == 1 {
-                    Some(records.result[0].id.clone())
+            Ok((res, rrset)) => {
+                if res.status() == StatusCode::OK {
+                    Ok(rrset)
                 } else {
-                    panic!("Unable to lookup address for: {}", record_name)
+                    Ok(ResourceRecordSet::default())
                 }
-            }
+            },
             Err(e) => {
-                handle_cf_error(&e).await;
-                None
-            }
+                warn!("{:?}", e);
+                Err(e)
+            },
     }
 }
 
 async fn update_record(
-    record_identifier: &str,
+    rrset: ResourceRecordSet,
+    project: &str,
     zone_identifier: &str,
-    name: &str,
-    address: &Ipv4Addr,
-    api_client: &CFClient,
+    record_name: &str,
+    api_client: &Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>
 ) -> Option<()> {
-    let tracer = global::tracer("update_record");
-    let mut span = tracer.start("Updating record...");
-    span.set_attribute(KeyValue::new("dns.address", address.to_string()));
-    span.set_attribute(KeyValue::new("dns.name", name.to_string()));
+    let tracer = global::tracer("gupdate_record");
+    let mut span = tracer.start("GUpdating record...");
+    span.set_attribute(KeyValue::new("dns.address", rrset.rrdatas.as_ref().unwrap()[0].clone()));
+    span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
     let cx = Context::current_with_span(span);
 
     match api_client
-        .request_handle(&dns::UpdateDnsRecord {
-            zone_identifier,
-            identifier: record_identifier,
-            params: dns::UpdateDnsRecordParams {
-                ttl: Some(60),
-                proxied: None,
-                name,
-                content: dns::DnsContent::A {
-                    content: *address,
-                },
-            },
-        })
-        .with_context(cx)
+        .resource_record_sets()
+        .patch(rrset, project, zone_identifier, record_name, "A")
+        .doit()
+        .with_context(cx.clone())
         .await {
-            Ok(_) => Some(()),
+            Ok((_,_)) => Some(()),
             Err(e) => {
-                handle_cf_error(&e).await;
+                warn!("{:?}", e);
                 None
-            }
-    }
+            },
+        }
 }
 
-async fn create_cf_api_client(client: &VaultClient) -> CFClient {
-    let tracer = global::tracer("create_cf_api_client");
-    let mut span = tracer.start("Create CF API Client...");
+async fn create_clouddns_client(client: &VaultClient) -> Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>> {
+    let tracer = global::tracer("create_clouddns_client");
+    let span = tracer.start("Create Cloud DNS API Client...");
+    let cx = Context::current_with_span(span);
 
-    let response: VaultKV2 = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "cf-api")
-        //.with_context(Context::current_with_span(span))
+    let vault_response: CloudDnsServiceAccount = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "clouddns-api")
+        .with_context(cx.clone())
         .await
         .unwrap();
-    let credentials: Credentials = Credentials::UserAuthToken {
-        token: response.key.trim_matches('"').to_string(),
-    };
-    let api_client = CFClient::new(
-        credentials,
-        HttpApiClientConfig::default(),
-        Environment::Production,
-    )
-    .unwrap();
-    span.end();
+    let serviceaccountkey: oauth2::ServiceAccountKey = serde_json::from_str(&vault_response.serviceaccount).unwrap();
+    let authenticator = oauth2::ServiceAccountAuthenticator::builder(serviceaccountkey)
+        .build()
+        .with_context(cx.clone())
+        .await
+        .unwrap();
+    let api_client = Dns::new(
+        hyper::Client::builder()
+            .build(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .https_or_http()
+                    .enable_http1()
+                    .enable_http2()
+                    .build()),
+        authenticator);
     api_client
 }
 
-async fn dns(zone_name: &str, record_name: &str) {
+async fn dns(project: &str, zone_name: &str, record_name: &str) {
     let tracer = global::tracer("dns");
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
 
     let (current_ip, lookup_ip) = futures_util::future::join(
         dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME),
-        dns_lookup(CF_ADDRESS, record_name),
+        dns_lookup(DNS_ADDRESS, record_name),
     )
     .with_context(cx.clone())
     .await;
@@ -266,26 +213,17 @@ async fn dns(zone_name: &str, record_name: &str) {
             "DNS record for {} ({} ==> {}) will be updated",
             record_name, &lookup_ip, &current_ip
         );
-        let api_client = create_cf_api_client(&create_vault_client().await.unwrap())
+        let api_client = create_clouddns_client(&create_vault_client().await.unwrap())
             .with_context(cx.clone())
             .await;
-        let zone_identifier = get_zone_id(zone_name, &api_client)
+        let mut rrset = get_record_set(project, zone_name, record_name, &api_client)
             .with_context(cx.clone())
             .await
             .unwrap();
-        let record_id = get_current_record(record_name, &zone_identifier, &api_client)
+        rrset.rrdatas = Some(vec!(current_ip.to_string()));
+        update_record(rrset, project, zone_name, record_name, &api_client)
             .with_context(cx.clone())
-            .await
-            .unwrap();
-        update_record(
-            &record_id,
-            &zone_identifier,
-            record_name,
-            &current_ip,
-            &api_client,
-        )
-        .with_context(cx.clone())
-        .await;
+            .await;
     }
 }
 
@@ -358,11 +296,11 @@ pub async fn run(
         let span = tracer.start("root");
         let cx = Context::current_with_span(span);
 
-        dns(config.zone, config.record)
+        dns(config.project, config.zone, config.record)
             .with_context(cx)
             .await;
 
-        thread::sleep(Duration::from_secs(120));
         global::shutdown_tracer_provider();
+        thread::sleep(Duration::from_secs(120));
     }
 }
