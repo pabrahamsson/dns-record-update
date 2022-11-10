@@ -178,7 +178,7 @@ async fn create_clouddns_client(client: &VaultClient) -> Dns<hyper_rustls::Https
         .with_context(cx.clone())
         .await
         .unwrap();
-    let api_client = Dns::new(
+    Dns::new(
         hyper::Client::builder()
             .build(
                 hyper_rustls::HttpsConnectorBuilder::new()
@@ -187,8 +187,7 @@ async fn create_clouddns_client(client: &VaultClient) -> Dns<hyper_rustls::Https
                     .enable_http1()
                     .enable_http2()
                     .build()),
-        authenticator);
-    api_client
+        authenticator)
 }
 
 async fn dns(project: &str, zone_name: &str, record_name: &str) {
