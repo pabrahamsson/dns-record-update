@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.23"
-env_logger = "0.9.3"
+env_logger = "0.10.0"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 google-dns1 = "4.0.1"
 http = "0.2.8"
