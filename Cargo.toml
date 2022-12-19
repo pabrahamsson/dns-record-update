@@ -17,6 +17,6 @@ opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.17.0", features = ["rt-tokio"] }
 rsdns = { version = "0.13.1", features = ["net-tokio"] }
 serde = { version = "1.0.150" }
-serde_json = "1.0.89"
+serde_json = "1.0.91"
 tokio = { version = "1.23.0", features = ["rt-multi-thread", "net", "macros", "signal"] }
 vaultrs = "0.6.2"
