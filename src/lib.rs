@@ -24,7 +24,7 @@ use std::{
     time::Duration,
 };
 use vaultrs::{
-    auth::kubernetes::login,
+    auth::kubernetes::login as vault_login,
     client::{Client as VCClient, VaultClient, VaultClientSettingsBuilder},
     error::ClientError,
 };
@@ -147,6 +147,7 @@ async fn update_record(
     let mut span = tracer.start("GUpdating record...");
     span.set_attribute(KeyValue::new("dns.address", rrset.rrdatas.as_ref().unwrap()[0].clone()));
     span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
+    span.set_attribute(KeyValue::new("dns.record", format!("{:?}", rrset)));
     let cx = Context::current_with_span(span);
 
     match api_client
@@ -263,7 +264,7 @@ async fn create_vault_client() -> Result<VaultClient, ClientError> {
     let jwt = fs::read_to_string(jwt_token_path).unwrap();
     let mount = "ocp/cf-dyn-dns-k8s";
     let role = "cf-dyn-dns-secret-reader";
-    match login(&vault_client, mount, role, &jwt)
+    match vault_login(&vault_client, mount, role, &jwt)
         .with_context(cx.clone())
         .await {
             Ok(response) => {
