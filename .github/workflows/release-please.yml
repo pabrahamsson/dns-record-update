@@ -1,0 +1,34 @@
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - Makefile
+      - '.github/**'
+
+name: release-please
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tags: "${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}"
+    steps:
+      - uses: google-github-actions/release-please-action@v3
+        id: release
+        with:
+          release-type: rust
+          package-name: dns-record-update
+
+  publish-latest:
+    name: Publish latest container image
+    needs: release-please
+    uses: pabrahamsson/dns-record-update/.github/workflows/docker-publish.yml@main
+
+  publish-release:
+    name: Publish versioned container image
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    uses: pabrahamsson/dns-record-update/.github/workflows/docker-publish.yml@main
+    with:
+      tags: ${{ needs.release-please.outputs.tags }}
