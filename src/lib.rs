@@ -98,12 +98,6 @@ struct CloudDnsServiceAccount {
     serviceaccount: String,
 }
 
-/*
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-*/
-
 async fn update_record(
     ip_address: &Ipv4Addr,
     project: &str,
