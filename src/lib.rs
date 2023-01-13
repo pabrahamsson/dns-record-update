@@ -13,6 +13,7 @@ use opentelemetry::{
 use rsdns::{
     clients::{tokio::Client, ClientConfig},
     constants::Class,
+    Error as RDError,
     records::data::A,
 };
 use serde::{Deserialize, Serialize};
@@ -172,12 +173,8 @@ async fn dns(project: &str, zone_name: &str, record_name: &str) {
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
 
-    let (current_ip, lookup_ip) = futures_util::future::join(
-        dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME),
-        dns_lookup(DNS_ADDRESS, record_name),
-    )
-    .with_context(cx.clone())
-    .await;
+    let current_ip = dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME).await.unwrap();
+    let lookup_ip = dns_lookup(DNS_ADDRESS, record_name).await.unwrap();
 
     if current_ip == lookup_ip {
         info!(
@@ -199,7 +196,7 @@ async fn dns(project: &str, zone_name: &str, record_name: &str) {
     }
 }
 
-async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
+async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Result<Ipv4Addr, RDError> {
     let tracer = global::tracer("dns_lookup");
     let mut span = tracer.start("Getting current dns address...");
     span.set_attribute(KeyValue::new("dns.hostname", hostname.to_string()));
@@ -209,13 +206,17 @@ async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
     let nameserver = SocketAddr::new(resolver, 53);
     let config = ClientConfig::with_nameserver(nameserver);
     let mut client = Client::new(config).await.unwrap();
-    let rrset = client
+
+    match client
         .query_rrset::<A>(hostname, Class::In)
         .with_context(cx)
-        .await
-        .unwrap();
-    debug!("A record: {}", rrset.rdata[0].address);
-    rrset.rdata[0].address
+        .await {
+            Ok(rrset) => {
+                debug!("A record: {}", rrset.rdata[0].address);
+                Ok(rrset.rdata[0].address)
+            },
+            Err(e) => Err(e),
+    }
 }
 
 async fn create_vault_client() -> Result<VaultClient, ClientError> {
