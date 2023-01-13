@@ -3,7 +3,6 @@ extern crate env_logger;
 extern crate google_dns1 as dns1;
 
 use dns1::{api::ResourceRecordSet, Dns, Error as CDError, hyper, hyper_rustls, oauth2};
-use http::StatusCode;
 use log::{debug, info, warn};
 use opentelemetry::{
     global,
@@ -104,62 +103,39 @@ fn print_type_of<T>(_: &T) {
 }
 */
 
-async fn get_record_set(
-    project: &str,
-    zone_identifier: &str,
-    record_name: &str,
-    api_client: &Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>,
-) -> Result<ResourceRecordSet, CDError> {
-    let tracer = global::tracer("get_record_set");
-    let mut span = tracer.start("Looking up record_set...");
-    span.set_attribute(KeyValue::new("dns.record", record_name.to_string()));
-    span.set_attribute(KeyValue::new("dns.zone", zone_identifier.to_string()));
-    let cx = Context::current_with_span(span);
-
-    match api_client
-        .resource_record_sets()
-        .get(project, zone_identifier, record_name, "A")
-        .doit()
-        .with_context(cx)
-        .await {
-            Ok((res, rrset)) => {
-                if res.status() == StatusCode::OK {
-                    Ok(rrset)
-                } else {
-                    Ok(ResourceRecordSet::default())
-                }
-            },
-            Err(e) => {
-                warn!("{:?}", e);
-                Err(e)
-            },
-    }
-}
-
 async fn update_record(
-    rrset: ResourceRecordSet,
+    ip_address: &Ipv4Addr,
     project: &str,
     zone_identifier: &str,
     record_name: &str,
     api_client: &Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>
-) -> Option<()> {
+) -> Result<(), CDError> {
     let tracer = global::tracer("gupdate_record");
     let mut span = tracer.start("GUpdating record...");
-    span.set_attribute(KeyValue::new("dns.address", rrset.rrdatas.as_ref().unwrap()[0].clone()));
     span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
-    span.set_attribute(KeyValue::new("dns.record", format!("{:?}", rrset)));
+    span.set_attribute(KeyValue::new("dns.record", ip_address.to_string()));
     let cx = Context::current_with_span(span);
 
+    let rrset = ResourceRecordSet {
+        kind: Some(String::from("dns#resourceRecordSet")),
+        name: Some(record_name.to_string()),
+        signature_rrdatas: Some(vec!()),
+        ttl: Some(60),
+        type_: Some(String::from("A")),
+        rrdatas: Some(vec!(ip_address.to_string())),
+        routing_policy: None,
+    };
     match api_client
         .resource_record_sets()
         .patch(rrset, project, zone_identifier, record_name, "A")
         .doit()
         .with_context(cx.clone())
         .await {
-            Ok((_,_)) => Some(()),
+            Ok((_,_)) => Ok(()),
             Err(e) => {
                 warn!("{:?}", e);
-                None
+                //None
+                Err(e)
             },
         }
 }
@@ -216,14 +192,10 @@ async fn dns(project: &str, zone_name: &str, record_name: &str) {
         let api_client = create_clouddns_client(&create_vault_client().await.unwrap())
             .with_context(cx.clone())
             .await;
-        let mut rrset = get_record_set(project, zone_name, record_name, &api_client)
+        update_record(&current_ip, project, zone_name, record_name, &api_client)
             .with_context(cx.clone())
             .await
             .unwrap();
-        rrset.rrdatas = Some(vec!(current_ip.to_string()));
-        update_record(rrset, project, zone_name, record_name, &api_client)
-            .with_context(cx.clone())
-            .await;
     }
 }
 
