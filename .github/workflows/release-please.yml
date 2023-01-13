@@ -4,7 +4,6 @@ on:
       - main
     paths-ignore:
       - Makefile
-      - '.github/**'
 
 name: release-please
 jobs:
