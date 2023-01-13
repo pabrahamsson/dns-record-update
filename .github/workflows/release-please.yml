@@ -23,7 +23,7 @@ jobs:
   publish-latest:
     name: Publish latest container image
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created != "true" }}
+    if: ${{ needs.release-please.outputs.release_created != 'true' }}
     uses: pabrahamsson/dns-record-update/.github/workflows/docker-publish.yml@main
 
   publish-release:
