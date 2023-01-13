@@ -23,6 +23,7 @@ jobs:
   publish-latest:
     name: Publish latest container image
     needs: release-please
+    if: needs.release-please.outputs.release_created != "true"
     uses: pabrahamsson/dns-record-update/.github/workflows/docker-publish.yml@main
 
   publish-release:
@@ -31,4 +32,4 @@ jobs:
     if: ${{ needs.release-please.outputs.release_created }}
     uses: pabrahamsson/dns-record-update/.github/workflows/docker-publish.yml@main
     with:
-      tags: ${{ needs.release-please.outputs.tags }}
+      tags: "${{ needs.release-please.outputs.tags }} latest"
