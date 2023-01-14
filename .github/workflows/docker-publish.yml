@@ -51,6 +51,14 @@ jobs:
           containerfiles: |
             ./Containerfile
 
+      - name: Registry login
+        id: registry-login
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+
       - name: Push image
         id: push-to-registry
         uses: redhat-actions/push-to-registry@v2
