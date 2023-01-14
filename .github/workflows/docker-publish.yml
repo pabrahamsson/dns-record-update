@@ -72,4 +72,6 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
-        run: echo "${{ steps.buildah-build.outputs.image }}" | xargs -I {} cosign sign {}@${{ steps.push-to-registry.outputs.digest }}
+        run: |
+          cp ${XDG_RUNTIME_DIR}/containers/auth.json ~/.docker/config.json
+          echo "${{ steps.buildah-build.outputs.image }}" | xargs -I {} cosign sign {}@${{ steps.push-to-registry.outputs.digest }}
