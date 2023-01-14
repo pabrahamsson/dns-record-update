@@ -55,7 +55,7 @@ jobs:
         id: push-to-registry
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: ${{ steps.buildah-build.outputs.image }}
+          image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.buildah-build.outputs.tags }}
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
