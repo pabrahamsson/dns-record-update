@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.3](https://github.com/pabrahamsson/dns-record-update/compare/v0.4.2...v0.4.3) (2023-01-14)
+
+
+### Bug Fixes
+
+* Improve error handling for dns lookups ([05402ce](https://github.com/pabrahamsson/dns-record-update/commit/05402ce87d721b0547a1694ece6fe614590b3325))
+* Minor cleanup ([d6ea055](https://github.com/pabrahamsson/dns-record-update/commit/d6ea0552365f2913115f978827e9c7b2061beee9))
+* **workflow:** Ajust push-to-registry inputs ([15adf9d](https://github.com/pabrahamsson/dns-record-update/commit/15adf9d2cc437f12cc93bc3078b382d713042e1f))
+* **workflow:** Copy podman registry creds to Docker location ([91055be](https://github.com/pabrahamsson/dns-record-update/commit/91055be06da5f31b35bfac99a0ee80a31a0e6534))
+* **workflow:** Use podman login action ([69f345e](https://github.com/pabrahamsson/dns-record-update/commit/69f345ed26312e2c6222f3fb36ff91799489196a))
+
 ## [0.4.2](https://github.com/pabrahamsson/dns-record-update/compare/v0.4.1...v0.4.2) (2023-01-13)
 
 
