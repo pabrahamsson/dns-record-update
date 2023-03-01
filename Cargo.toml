@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.23"
 env_logger = "0.10.0"
-futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.26", default-features = false, features = ["std"] }
 google-dns1 = "4.0.1"
 http = "0.2.8"
 log = "0.4.0"
