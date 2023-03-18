@@ -1,7 +1,7 @@
 extern crate env_logger;
 
 use std::{env, io::Write, process};
-use chrono::Local;
+use google_dns1::chrono::Local;
 use env_logger::Builder;
 use log::{error, LevelFilter};
 use dns_record_update::{Config, LogMessage};
