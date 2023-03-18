@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "dns-record-update"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "env_logger",
  "futures-util",
