@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/pabrahamsson/dns-record-update/compare/v0.4.3...v0.4.4) (2023-03-18)
+
+
+### Bug Fixes
+
+* Remove chrono dependency ([eb33808](https://github.com/pabrahamsson/dns-record-update/commit/eb33808df04c55bc97f7251e90a39a9156f577bd))
+
 ## [0.4.3](https://github.com/pabrahamsson/dns-record-update/compare/v0.4.2...v0.4.3) (2023-01-14)
 
 
