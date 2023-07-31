@@ -15,7 +15,7 @@ openssl = { version = "0.10.55", features = ["vendored"] }
 opentelemetry = { version = "0.19.0", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.18.0", features = ["rt-tokio"] }
 rsdns = { version = "0.15.0", features = ["net-tokio"] }
-serde = { version = "1.0.177" }
+serde = { version = "1.0.179" }
 serde_json = "1.0.104"
 tokio = { version = "1.29.1", features = ["rt-multi-thread", "net", "macros", "signal"] }
 vaultrs = "0.7.0"
