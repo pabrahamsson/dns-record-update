@@ -39,20 +39,22 @@ const CF_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1));
 const VAULT_ADDR: &str = "http://vault.vault.svc:8200";
 
 pub struct Config<'a> {
+    zone_id: &'a str,
     zone: &'a str,
     record: &'a str,
 }
 
 impl<'a> Config<'a> {
     pub fn new(args: &[String]) -> Result<Config, &str> {
-        if args.len() != 3 {
+        if args.len() != 4 {
             return Err("Incorrect number of arguments");
         }
 
-        let zone = &args[1];
-        let record = &args[2];
+        let zone_id = &args[1];
+        let zone = &args[2];
+        let record = &args[3];
 
-        Ok(Config { zone, record })
+        Ok(Config { zone_id, zone, record })
     }
 }
 
@@ -123,6 +125,7 @@ async fn handle_cf_error(api_failure: &ApiFailure) {
     }
 }
 
+/*
 async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
     let tracer = global::tracer("get_zone_id");
     let mut span = tracer.start("Looking up dns zone...");
@@ -151,6 +154,7 @@ async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
             }
     }
 }
+*/
 
 async fn get_current_record(
     record_name: &str,
@@ -188,6 +192,7 @@ async fn get_current_record(
 }
 
 async fn update_record(
+    zone_identifier: &str,
     zone_name: &str,
     record_name: &str,
     ip_address: &Ipv4Addr,
@@ -199,10 +204,12 @@ async fn update_record(
     span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
     let cx = Context::current_with_span(span);
 
+    /*
     let zone_identifier = get_zone_id(zone_name, api_client)
         .with_context(cx.clone())
         .await
         .unwrap();
+    */
 
     let record_identifier = get_current_record(record_name, &zone_identifier, api_client)
         .with_context(cx.clone())
@@ -253,7 +260,7 @@ async fn create_cf_api_client(client: &VaultClient) -> CFClient {
     api_client
 }
 
-async fn dns(zone_name: &str, record_name: &str) {
+async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
     let tracer = global::tracer("dns");
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
@@ -297,7 +304,7 @@ async fn dns(zone_name: &str, record_name: &str) {
         .with_context(cx.clone())
         .await;
         */
-        update_record(zone_name, record_name, &current_ip, &api_client)
+        update_record(zone_id, zone_name, record_name, &current_ip, &api_client)
             .with_context(cx.clone())
             .await
             .unwrap();
@@ -373,7 +380,7 @@ pub async fn run(
         let span = tracer.start("root");
         let cx = Context::current_with_span(span);
 
-        dns(config.zone, config.record)
+        dns(config.zone_id, config.zone, config.record)
             .with_context(cx)
             .await;
 
