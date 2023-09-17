@@ -188,28 +188,37 @@ async fn get_current_record(
 }
 
 async fn update_record(
-    record_identifier: &str,
-    zone_identifier: &str,
-    name: &str,
-    address: &Ipv4Addr,
+    zone_name: &str,
+    record_name: &str,
+    ip_address: &Ipv4Addr,
     api_client: &CFClient,
 ) -> Option<()> {
     let tracer = global::tracer("update_record");
     let mut span = tracer.start("Updating record...");
-    span.set_attribute(KeyValue::new("dns.address", address.to_string()));
-    span.set_attribute(KeyValue::new("dns.name", name.to_string()));
+    span.set_attribute(KeyValue::new("dns.address", ip_address.to_string()));
+    span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
     let cx = Context::current_with_span(span);
+
+    let zone_identifier = get_zone_id(zone_name, api_client)
+        .with_context(cx.clone())
+        .await
+        .unwrap();
+
+    let record_identifier = get_current_record(record_name, &zone_identifier, api_client)
+        .with_context(cx.clone())
+        .await
+        .unwrap();
 
     match api_client
         .request_handle(&dns::UpdateDnsRecord {
-            zone_identifier,
-            identifier: record_identifier,
+            zone_identifier: &zone_identifier,
+            identifier: &record_identifier,
             params: dns::UpdateDnsRecordParams {
                 ttl: Some(60),
                 proxied: None,
-                name,
+                name: record_name,
                 content: dns::DnsContent::A {
-                    content: *address,
+                    content: *ip_address,
                 },
             },
         })
@@ -269,6 +278,7 @@ async fn dns(zone_name: &str, record_name: &str) {
         let api_client = create_cf_api_client(&create_vault_client().await.unwrap())
             .with_context(cx.clone())
             .await;
+        /*
         let zone_identifier = get_zone_id(zone_name, &api_client)
             .with_context(cx.clone())
             .await
@@ -286,6 +296,11 @@ async fn dns(zone_name: &str, record_name: &str) {
         )
         .with_context(cx.clone())
         .await;
+        */
+        update_record(zone_name, record_name, &current_ip, &api_client)
+            .with_context(cx.clone())
+            .await
+            .unwrap();
     }
 }
 
