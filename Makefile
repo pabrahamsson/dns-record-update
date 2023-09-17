@@ -8,17 +8,17 @@ debug:
 release:
 				cargo build -r
 
-docker-debug-build: debug
+container-debug-build: debug
 				podman pull registry.access.redhat.com/ubi9/ubi-minimal:latest
-				podman build -t $(TAG) . -f Dockerfile.local
+				podman build -t $(TAG) . -f Containerfile.local
 
-docker-release-build: release
+container-release-build: release
 				podman pull registry.access.redhat.com/ubi9/ubi-minimal:latest
-				podman build -t $(TAG) . -f Dockerfile.local-release
+				podman build -t $(TAG) . -f Containerfile.local-release
 
-docker-push:
+container-push:
 				podman push $(TAG)
 
-docker-debug: docker-debug-build docker-push
+container-debug: container-debug-build container-push
 
-docker-release: docker-release-build docker-push
+container-release: container-release-build container-push

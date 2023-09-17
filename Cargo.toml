@@ -1,5 +1,5 @@
 [package]
-name = "cf-dns-record-update"
+name = "dns-record-update"
 version = "0.5.0"
 edition = "2021"
 

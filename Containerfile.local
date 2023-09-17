@@ -1,0 +1,4 @@
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+COPY ./target/debug/dns-record-update /usr/local/bin/dns-record-update
+ENTRYPOINT ["dns-record-update"]
+CMD ["help"]

@@ -9,6 +9,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
     cargo build --release
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-COPY --from=builder /usr/src/app/target/release/cf-dns-record-update /usr/local/bin/cf-dns-record-update
-ENTRYPOINT ["cf-dns-record-update"]
+RUN microdnf update -y && microdnf clean all
+COPY --from=builder /usr/src/app/target/release/dns-record-update /usr/local/bin/dns-record-update
+ENTRYPOINT ["dns-record-update"]
 CMD ["help"]

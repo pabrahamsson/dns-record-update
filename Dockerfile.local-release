@@ -1,4 +1,0 @@
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-COPY ./target/release/cf-dns-record-update /usr/local/bin/cf-dns-record-update
-ENTRYPOINT ["cf-dns-record-update"]
-CMD ["help"]
