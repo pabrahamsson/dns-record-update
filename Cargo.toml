@@ -1,21 +1,24 @@
 [package]
 name = "dns-record-update"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-env_logger = "0.10.0"
-futures-util = { version = "0.3.28", default-features = false, features = ["std"] }
-google-dns1 = "5.0.2"
-http = "0.2.9"
-log = "0.4.19"
-openssl = { version = "0.10.55", features = ["vendored"] }
-opentelemetry = { version = "0.19.0", features = ["rt-tokio"] }
-opentelemetry-jaeger = { version = "0.18.0", features = ["rt-tokio"] }
-rsdns = { version = "0.15.0", features = ["net-tokio"] }
-serde = { version = "1.0.177" }
-serde_json = "1.0.104"
-tokio = { version = "1.29.1", features = ["rt-multi-thread", "net", "macros", "signal"] }
-vaultrs = "0.7.0"
+chrono = "0.4.19"
+chrono-tz = "0.7.0"
+cloudflare = "0.10.1"
+env_logger = "0.9.1"
+futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+log = "0.4.0"
+openssl = { version = "0.10.42", features = ["vendored"] }
+opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
+opentelemetry-jaeger = { version = "0.17.0", features = ["rt-tokio"] }
+rsdns = { version = "0.13.1", features = ["net-tokio"] }
+serde = { version = "1.0.147" }
+serde_json = "1.0.87"
+thrift =  "0.16"
+tokio = { version = "1.21.2", features = ["rt", "net", "macros"] }
+vaultrs = "0.6.2"
+webpki = "0.22"
