@@ -1,8 +1,13 @@
 #![allow(clippy::redundant_field_names)]
+extern crate cloudflare;
 extern crate env_logger;
-extern crate google_dns1 as dns1;
 
-use dns1::{api::ResourceRecordSet, Dns, Error as CDError, hyper, hyper_rustls, oauth2};
+use cloudflare::endpoints::{dns, zone};
+use cloudflare::framework::{
+    async_api::Client as CFClient, auth::Credentials, response::ApiFailure, Environment,
+    HttpApiClientConfig,
+};
+
 use log::{debug, info, warn};
 use opentelemetry::{
     global,
@@ -13,7 +18,6 @@ use opentelemetry::{
 use rsdns::{
     clients::{tokio::Client, ClientConfig},
     constants::Class,
-    Error as RDError,
     records::data::A,
 };
 use serde::{Deserialize, Serialize};
@@ -24,7 +28,7 @@ use std::{
     time::Duration,
 };
 use vaultrs::{
-    auth::kubernetes::login as vault_login,
+    auth::kubernetes::login,
     client::{Client as VCClient, VaultClient, VaultClientSettingsBuilder},
     error::ClientError,
 };
@@ -32,7 +36,7 @@ use vaultrs::{
 const JWT_TOKEN_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 const LOOKUP_HOSTNAME: &str = "myip.opendns.com";
 const RESOLVER_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222));
-const DNS_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4));
+const CF_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1));
 const VAULT_ADDR: &str = "http://vault.vault.svc:8200";
 
 pub struct Config<'a> {
@@ -208,14 +212,14 @@ async fn update_record(
         .unwrap();
     */
 
-    let record_identifier = get_current_record(record_name, &zone_identifier, api_client)
+    let record_identifier = get_current_record(record_name, zone_identifier, api_client)
         .with_context(cx.clone())
         .await
         .unwrap();
 
     match api_client
         .request_handle(&dns::UpdateDnsRecord {
-            zone_identifier: &zone_identifier,
+            zone_identifier: zone_identifier,
             identifier: &record_identifier,
             params: dns::UpdateDnsRecordParams {
                 ttl: Some(60),
@@ -228,40 +232,33 @@ async fn update_record(
         })
         .with_context(cx)
         .await {
-            Ok((_,_)) => Ok(()),
+            Ok(_) => Some(()),
             Err(e) => {
-                warn!("{:?}", e);
-                //None
-                Err(e)
-            },
+                handle_cf_error(&e).await;
+                None
+            }
         }
 }
 
-async fn create_clouddns_client(client: &VaultClient) -> Dns<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>> {
-    let tracer = global::tracer("create_clouddns_client");
-    let span = tracer.start("Create Cloud DNS API Client...");
-    let cx = Context::current_with_span(span);
+async fn create_cf_api_client(client: &VaultClient) -> CFClient {
+    let tracer = global::tracer("create_cf_api_client");
+    let mut span = tracer.start("Create CF API Client...");
 
-    let vault_response: CloudDnsServiceAccount = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "clouddns-api")
-        .with_context(cx.clone())
+    let response: VaultKV2 = vaultrs::kv2::read(client, "ocp/cf-dyn-dns", "cf-api")
+        //.with_context(Context::current_with_span(span))
         .await
         .unwrap();
-    let serviceaccountkey: oauth2::ServiceAccountKey = serde_json::from_str(&vault_response.serviceaccount).unwrap();
-    let authenticator = oauth2::ServiceAccountAuthenticator::builder(serviceaccountkey)
-        .build()
-        .with_context(cx.clone())
-        .await
-        .unwrap();
-    Dns::new(
-        hyper::Client::builder()
-            .build(
-                hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_or_http()
-                    .enable_http1()
-                    .enable_http2()
-                    .build()),
-        authenticator)
+    let credentials: Credentials = Credentials::UserAuthToken {
+        token: response.key.trim_matches('"').to_string(),
+    };
+    let api_client = CFClient::new(
+        credentials,
+        HttpApiClientConfig::default(),
+        Environment::Production,
+    )
+    .unwrap();
+    span.end();
+    api_client
 }
 
 async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
@@ -269,8 +266,12 @@ async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
 
-    let current_ip = dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME).await.unwrap();
-    let lookup_ip = dns_lookup(DNS_ADDRESS, record_name).await.unwrap();
+    let (current_ip, lookup_ip) = futures_util::future::join(
+        dns_lookup(RESOLVER_ADDRESS, LOOKUP_HOSTNAME),
+        dns_lookup(CF_ADDRESS, record_name),
+    )
+    .with_context(cx.clone())
+    .await;
 
     if current_ip == lookup_ip {
         info!(
@@ -282,7 +283,7 @@ async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
             "DNS record for {} ({} ==> {}) will be updated",
             record_name, &lookup_ip, &current_ip
         );
-        let api_client = create_clouddns_client(&create_vault_client().await.unwrap())
+        let api_client = create_cf_api_client(&create_vault_client().await.unwrap())
             .with_context(cx.clone())
             .await;
         /*
@@ -311,7 +312,7 @@ async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
     }
 }
 
-async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Result<Ipv4Addr, RDError> {
+async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
     let tracer = global::tracer("dns_lookup");
     let mut span = tracer.start("Getting current dns address...");
     span.set_attribute(KeyValue::new("dns.hostname", hostname.to_string()));
@@ -321,17 +322,13 @@ async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Result<Ipv4Addr, RDErro
     let nameserver = SocketAddr::new(resolver, 53);
     let config = ClientConfig::with_nameserver(nameserver);
     let mut client = Client::new(config).await.unwrap();
-
-    match client
+    let rrset = client
         .query_rrset::<A>(hostname, Class::In)
         .with_context(cx)
-        .await {
-            Ok(rrset) => {
-                debug!("A record: {}", rrset.rdata[0].address);
-                Ok(rrset.rdata[0].address)
-            },
-            Err(e) => Err(e),
-    }
+        .await
+        .unwrap();
+    debug!("A record: {}", rrset.rdata[0].address);
+    rrset.rdata[0].address
 }
 
 async fn create_vault_client() -> Result<VaultClient, ClientError> {
@@ -352,7 +349,7 @@ async fn create_vault_client() -> Result<VaultClient, ClientError> {
     let jwt = fs::read_to_string(jwt_token_path).unwrap();
     let mount = "ocp/cf-dyn-dns-k8s";
     let role = "cf-dyn-dns-secret-reader";
-    match vault_login(&vault_client, mount, role, &jwt)
+    match login(&vault_client, mount, role, &jwt)
         .with_context(cx.clone())
         .await {
             Ok(response) => {
