@@ -55,7 +55,11 @@ impl<'a> Config<'a> {
         let zone = &args[2];
         let record = &args[3];
 
-        Ok(Config { zone_id, zone, record })
+        Ok(Config {
+            zone_id,
+            zone,
+            record,
+        })
     }
 }
 
@@ -177,18 +181,19 @@ async fn get_current_record(
             },
         })
         .with_context(cx)
-        .await {
-            Ok(records) => {
-                if records.result.len() == 1 {
-                    Some(records.result[0].id.clone())
-                } else {
-                    panic!("Unable to lookup address for: {}", record_name)
-                }
+        .await
+    {
+        Ok(records) => {
+            if records.result.len() == 1 {
+                Some(records.result[0].id.clone())
+            } else {
+                panic!("Unable to lookup address for: {}", record_name)
             }
-            Err(e) => {
-                handle_cf_error(&e).await;
-                None
-            }
+        }
+        Err(e) => {
+            handle_cf_error(&e).await;
+            None
+        }
     }
 }
 
@@ -231,13 +236,14 @@ async fn update_record(
             },
         })
         .with_context(cx)
-        .await {
-            Ok(_) => Some(()),
-            Err(e) => {
-                handle_cf_error(&e).await;
-                None
-            }
+        .await
+    {
+        Ok(_) => Some(()),
+        Err(e) => {
+            handle_cf_error(&e).await;
+            None
         }
+    }
 }
 
 async fn create_cf_api_client(client: &VaultClient) -> CFClient {
@@ -351,12 +357,13 @@ async fn create_vault_client() -> Result<VaultClient, ClientError> {
     let role = "cf-dyn-dns-secret-reader";
     match login(&vault_client, mount, role, &jwt)
         .with_context(cx.clone())
-        .await {
-            Ok(response) => {
-                vault_client.set_token(&response.client_token);
-                Ok(vault_client)
-            }
-            Err(e) => Err(e),
+        .await
+    {
+        Ok(response) => {
+            vault_client.set_token(&response.client_token);
+            Ok(vault_client)
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -375,7 +382,6 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
 pub async fn run(
     config: Config<'_>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-
     loop {
         let tracer = init_tracer()?;
         let span = tracer.start("root");

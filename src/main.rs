@@ -1,10 +1,10 @@
 extern crate env_logger;
 
-use std::{env, io::Write, process};
 use chrono::Local;
+use dns_record_update::{Config, LogMessage};
 use env_logger::Builder;
 use log::{error, LevelFilter};
-use dns_record_update::{Config, LogMessage};
+use std::{env, io::Write, process};
 
 #[tokio::main]
 async fn main() {
@@ -20,10 +20,7 @@ async fn main() {
                 loglevel: record.level().to_string(),
                 message: record.args().to_string(),
             };
-            writeln!(buf,
-                "{}",
-                serde_json::to_string(&log_message).unwrap()
-            )
+            writeln!(buf, "{}", serde_json::to_string(&log_message).unwrap())
         })
         .filter(None, LevelFilter::Warn)
         .init();
