@@ -17,7 +17,7 @@ log = "0.4.20"
 openssl = { version = "0.10.42", features = ["vendored"] }
 opentelemetry = { version = "0.20.0", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.19.0", features = ["rt-tokio"] }
-rsdns = { version = "0.15.0", features = ["net-tokio"] }
+rsdns = { version = "0.16.0", features = ["net-tokio"] }
 serde = { version = "1.0.147" }
 serde_json = "1.0.87"
 thrift = "0.17"
