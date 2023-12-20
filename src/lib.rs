@@ -2,7 +2,7 @@
 extern crate cloudflare;
 extern crate env_logger;
 
-use cloudflare::endpoints::{dns, zone};
+use cloudflare::endpoints::dns;
 use cloudflare::framework::{
     async_api::Client as CFClient, auth::Credentials, response::ApiFailure, Environment,
     HttpApiClientConfig,
@@ -11,14 +11,13 @@ use cloudflare::framework::{
 use log::{debug, info, warn};
 use opentelemetry::{
     global,
-    sdk::trace as sdktrace,
     trace::{FutureExt, Span, TraceContextExt, TraceError, Tracer},
     Context, KeyValue,
 };
+use opentelemetry_sdk::trace as sdktrace;
 use rsdns::{
     clients::{tokio::Client, ClientConfig},
-    constants::Class,
-    records::data::A,
+    records::{data::A, Class},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -130,37 +129,6 @@ async fn handle_cf_error(api_failure: &ApiFailure) {
     }
 }
 
-/*
-async fn get_zone_id(zone_name: &str, api_client: &CFClient) -> Option<String> {
-    let tracer = global::tracer("get_zone_id");
-    let mut span = tracer.start("Looking up dns zone...");
-    span.set_attribute(KeyValue::new("dns.zone", zone_name.to_string()));
-    let cx = Context::current_with_span(span);
-
-    match api_client
-        .request_handle(&zone::ListZones {
-            params: zone::ListZonesParams {
-                name: Some(zone_name.to_string()),
-                ..Default::default()
-            },
-        })
-        .with_context(cx)
-        .await {
-            Ok(records) => {
-                if records.result.len() == 1 {
-                    Some(records.result[0].id.clone())
-                } else {
-                    panic!("No zone found for: {zone_name}")
-                }
-            }
-            Err(e) => {
-                handle_cf_error(&e).await;
-                None
-            }
-    }
-}
-*/
-
 async fn get_current_record(
     record_name: &str,
     zone_identifier: &str,
@@ -173,7 +141,7 @@ async fn get_current_record(
     let cx = Context::current_with_span(span);
 
     match api_client
-        .request_handle(&dns::ListDnsRecords {
+        .request(&dns::ListDnsRecords {
             zone_identifier,
             params: dns::ListDnsRecordsParams {
                 name: Some(record_name.to_string()),
@@ -199,7 +167,6 @@ async fn get_current_record(
 
 async fn update_record(
     zone_identifier: &str,
-    zone_name: &str,
     record_name: &str,
     ip_address: &Ipv4Addr,
     api_client: &CFClient,
@@ -210,21 +177,14 @@ async fn update_record(
     span.set_attribute(KeyValue::new("dns.name", record_name.to_string()));
     let cx = Context::current_with_span(span);
 
-    /*
-    let zone_identifier = get_zone_id(zone_name, api_client)
-        .with_context(cx.clone())
-        .await
-        .unwrap();
-    */
-
     let record_identifier = get_current_record(record_name, zone_identifier, api_client)
         .with_context(cx.clone())
         .await
         .unwrap();
 
     match api_client
-        .request_handle(&dns::UpdateDnsRecord {
-            zone_identifier: zone_identifier,
+        .request(&dns::UpdateDnsRecord {
+            zone_identifier,
             identifier: &record_identifier,
             params: dns::UpdateDnsRecordParams {
                 ttl: Some(60),
@@ -267,7 +227,7 @@ async fn create_cf_api_client(client: &VaultClient) -> CFClient {
     api_client
 }
 
-async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
+async fn dns(zone_id: &str, record_name: &str) {
     let tracer = global::tracer("dns");
     let span = tracer.start("Dns logic...");
     let cx = Context::current_with_span(span);
@@ -292,26 +252,7 @@ async fn dns(zone_id: &str, zone_name: &str, record_name: &str) {
         let api_client = create_cf_api_client(&create_vault_client().await.unwrap())
             .with_context(cx.clone())
             .await;
-        /*
-        let zone_identifier = get_zone_id(zone_name, &api_client)
-            .with_context(cx.clone())
-            .await
-            .unwrap();
-        let record_id = get_current_record(record_name, &zone_identifier, &api_client)
-            .with_context(cx.clone())
-            .await
-            .unwrap();
-        update_record(
-            &record_id,
-            &zone_identifier,
-            record_name,
-            &current_ip,
-            &api_client,
-        )
-        .with_context(cx.clone())
-        .await;
-        */
-        update_record(zone_id, zone_name, record_name, &current_ip, &api_client)
+        update_record(zone_id, record_name, &current_ip, &api_client)
             .with_context(cx.clone())
             .await
             .unwrap();
@@ -329,7 +270,7 @@ async fn dns_lookup(resolver: IpAddr, hostname: &str) -> Ipv4Addr {
     let config = ClientConfig::with_nameserver(nameserver);
     let mut client = Client::new(config).await.unwrap();
     let rrset = client
-        .query_rrset::<A>(hostname, Class::In)
+        .query_rrset::<A>(hostname, Class::IN)
         .with_context(cx)
         .await
         .unwrap();
@@ -379,17 +320,13 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     */
 }
 
-pub async fn run(
-    config: Config<'_>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn run(config: Config<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     loop {
         let tracer = init_tracer()?;
         let span = tracer.start("root");
         let cx = Context::current_with_span(span);
 
-        dns(config.zone_id, config.zone, config.record)
-            .with_context(cx)
-            .await;
+        dns(config.zone_id, config.record).with_context(cx);
 
         global::shutdown_tracer_provider();
         thread::sleep(Duration::from_secs(120));

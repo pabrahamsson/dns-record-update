@@ -6,8 +6,7 @@ use env_logger::Builder;
 use log::{error, LevelFilter};
 use std::{env, io::Write, process};
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args: Vec<String> = env::args().collect();
     let config = Config::new(&args).unwrap_or_else(|err| {
         error!("Failed to parse arguments: {}", err);
@@ -25,7 +24,7 @@ async fn main() {
         .filter(None, LevelFilter::Warn)
         .init();
 
-    if let Err(e) = dns_record_update::run(config).await {
+    if let Err(e) = dns_record_update::run(config) {
         println!("Application error: {}", e);
         process::exit(1);
     }
