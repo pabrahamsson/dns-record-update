@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.3](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.2...v0.5.3) (2023-12-20)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate chrono to 0.4.31 ([f09a8a6](https://github.com/pabrahamsson/dns-record-update/commit/f09a8a6f45737674da0b8a5fec28c5863d11b12e))
+* **deps:** update rust crate chrono-tz to 0.8.4 ([3ab4696](https://github.com/pabrahamsson/dns-record-update/commit/3ab4696da491cef4351e7e90704dd056ccd5115e))
+* **deps:** update rust crate env_logger to 0.10.1 ([9067eab](https://github.com/pabrahamsson/dns-record-update/commit/9067eab8b261bfb723f318b30614f85a00de907e))
+* **deps:** update rust crate futures-util to 0.3.29 ([6d8e411](https://github.com/pabrahamsson/dns-record-update/commit/6d8e411b70383110504c8c2a54bca90c5414139f))
+* **deps:** update rust crate openssl to 0.10.61 ([136041e](https://github.com/pabrahamsson/dns-record-update/commit/136041ee83752e5b54ea60d80032fbc863297c76))
+* **deps:** update rust crate serde to 1.0.193 ([4a38f3e](https://github.com/pabrahamsson/dns-record-update/commit/4a38f3ec5d5c8dd2f7247f7f6d0c5242d292dc92))
+* **deps:** update rust crate serde_json to 1.0.108 ([373f220](https://github.com/pabrahamsson/dns-record-update/commit/373f220bf23dc9005fdc573ccc3c15da9b4b9982))
+* **deps:** update rust crate tokio to 1.35.1 ([032b75e](https://github.com/pabrahamsson/dns-record-update/commit/032b75e612e3b766b28eead3d66a399a8b63eeb4))
+
 ## [0.5.2](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.0...v0.5.2) (2023-12-20)
 
 
