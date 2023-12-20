@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.2](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.0...v0.5.2) (2023-12-20)
+
+
+### Features
+
+* Migrate back to Cloudflare ([f5a3a49](https://github.com/pabrahamsson/dns-record-update/commit/f5a3a49bad1d0dae624bbc9d4f32622e401a982e))
+
+
+### Miscellaneous Chores
+
+* release 0.5.2 ([fcf40db](https://github.com/pabrahamsson/dns-record-update/commit/fcf40db5aa1b22c8193b2933f2b789617dff2048))
+* release 0.5.2 ([4705ad6](https://github.com/pabrahamsson/dns-record-update/commit/4705ad60a0c5fa953bfc578527be3acec5ec3e6c))
+* release 0.5.2 ([fadfd31](https://github.com/pabrahamsson/dns-record-update/commit/fadfd3111cf3fd1c299e6eabd7a53322978df520))
+
 ## [0.4.4](https://github.com/pabrahamsson/dns-record-update/compare/v0.4.3...v0.4.4) (2023-03-18)
 
 
