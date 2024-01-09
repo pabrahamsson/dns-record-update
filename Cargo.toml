@@ -16,7 +16,7 @@ futures-util = { version = "0.3.30", default-features = false, features = [
 log = "0.4.20"
 openssl = { version = "0.10.62", features = ["vendored"] }
 opentelemetry = { version = "0.21.0" }
-opentelemetry_sdk = { version = "0.21.1", features = ["rt-tokio"] }
+opentelemetry_sdk = { version = "0.21.2", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.20.0", features = ["rt-tokio"] }
 rsdns = { version = "0.16.0", features = ["net-tokio"] }
 serde = { version = "1.0.193" }
