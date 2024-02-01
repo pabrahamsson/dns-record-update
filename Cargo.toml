@@ -20,7 +20,7 @@ opentelemetry_sdk = { version = "0.21.2", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.20.0", features = ["rt-tokio"] }
 rsdns = { version = "0.17.0", features = ["net-tokio"] }
 serde = { version = "1.0.196" }
-serde_json = "1.0.111"
+serde_json = "1.0.113"
 thrift = "0.17"
 tokio = { version = "1.35.1", features = ["rt", "net", "macros"] }
 vaultrs = "0.7.0"
