@@ -18,7 +18,7 @@ openssl = { version = "0.10.63", features = ["vendored"] }
 opentelemetry = { version = "0.21.0" }
 opentelemetry_sdk = { version = "0.21.2", features = ["rt-tokio"] }
 opentelemetry-jaeger = { version = "0.20.0", features = ["rt-tokio"] }
-rsdns = { version = "0.17.0", features = ["net-tokio"] }
+rsdns = { version = "0.19.0", features = ["net-tokio"] }
 serde = { version = "1.0.196" }
 serde_json = "1.0.113"
 thrift = "0.17"
