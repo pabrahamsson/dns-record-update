@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.5](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.4...v0.5.5) (2025-11-16)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate cloudflare to 0.14.0 ([3f255cf](https://github.com/pabrahamsson/dns-record-update/commit/3f255cfbc47649946f4249dbf3dc6548ff939e44))
+
 ## [0.5.4](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.3...v0.5.4) (2025-05-17)
 
 
