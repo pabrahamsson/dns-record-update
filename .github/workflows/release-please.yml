@@ -13,7 +13,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tags: "${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}"
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           release-type: rust
