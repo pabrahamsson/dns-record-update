@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.5](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.4...v0.5.5) (2026-01-28)
+
+
+### Bug Fixes
+
+* **deps:** update opentelemetry-rust monorepo to 0.31.0 ([1046409](https://github.com/pabrahamsson/dns-record-update/commit/1046409ddb2b813be9bb3152549611069bc5ef93))
+* **deps:** update opentelemetry-rust monorepo to 0.31.0 ([f51b64f](https://github.com/pabrahamsson/dns-record-update/commit/f51b64fdaf589782c6acd8c9513cb88cb9e4039b))
+* **deps:** update rust crate cloudflare to 0.14.0 ([01a8941](https://github.com/pabrahamsson/dns-record-update/commit/01a8941db108783d31c7dbb6cc9c589b05e54279))
+* **deps:** update rust crate cloudflare to 0.14.0 ([3f255cf](https://github.com/pabrahamsson/dns-record-update/commit/3f255cfbc47649946f4249dbf3dc6548ff939e44))
+
 ## [0.5.4](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.3...v0.5.4) (2025-05-17)
 
 
