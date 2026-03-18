@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.7](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.6...v0.5.7) (2026-03-18)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate vaultrs to 0.8.0 ([bf6f326](https://github.com/pabrahamsson/dns-record-update/commit/bf6f3266550b9ed864b3ab15dc32120f08ae74a0))
+* **deps:** update rust crate vaultrs to 0.8.0 ([7a2ef3e](https://github.com/pabrahamsson/dns-record-update/commit/7a2ef3eda09546fa60aee9b763dbbc69e72f95d8))
+
 ## [0.5.6](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.5...v0.5.6) (2026-02-06)
 
 
