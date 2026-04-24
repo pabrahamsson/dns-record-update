@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.8](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.7...v0.5.8) (2026-04-24)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate rsdns to 0.22.0 ([d47402a](https://github.com/pabrahamsson/dns-record-update/commit/d47402aded2225f4a79fc3551788d119b023008f))
+* **deps:** update rust crate rsdns to 0.22.0 ([dccc2c2](https://github.com/pabrahamsson/dns-record-update/commit/dccc2c2a013364dfbce8e9e9f84c25f3c26f045f))
+
 ## [0.5.7](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.6...v0.5.7) (2026-03-18)
 
 
