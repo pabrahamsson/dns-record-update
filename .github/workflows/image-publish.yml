@@ -43,7 +43,7 @@ jobs:
 
       - name: Build image
         id: buildah-build
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@v3
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: ${{ inputs.tags }}
