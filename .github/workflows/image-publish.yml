@@ -52,7 +52,7 @@ jobs:
 
       - name: Registry login
         id: registry-login
-        uses: redhat-actions/podman-login@v1
+        uses: redhat-actions/podman-login@v2
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
