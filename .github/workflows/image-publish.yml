@@ -60,7 +60,7 @@ jobs:
 
       - name: Push image
         id: push-to-registry
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@v3
         with:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.buildah-build.outputs.tags }}
