@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.12](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.11...v0.5.12) (2026-09-19)
+
+
+### Bug Fixes
+
+* **deps:** update opentelemetry-rust monorepo to 0.33.0 ([0c67e57](https://github.com/pabrahamsson/dns-record-update/commit/0c67e57e0e3a4730d62d407dd182f32bf5f07a18))
+* **deps:** update opentelemetry-rust monorepo to 0.33.0 ([4f930d4](https://github.com/pabrahamsson/dns-record-update/commit/4f930d48619e077cfec2320ddad8b06bf34e6eb2))
+
 ## [0.5.11](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.10...v0.5.11) (2026-07-20)
 
 
