@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.14](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.13...v0.5.14) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** update rust crate thrift to 0.25 ([da07397](https://github.com/pabrahamsson/dns-record-update/commit/da0739729ec80820adfa2808e9a3ee96f84244e5))
+* **deps:** update rust crate thrift to 0.25 ([86d8f36](https://github.com/pabrahamsson/dns-record-update/commit/86d8f36e351476ea67981acaf3c481376e61ffba))
+
 ## [0.5.13](https://github.com/pabrahamsson/dns-record-update/compare/v0.5.12...v0.5.13) (2026-09-25)
 
 
