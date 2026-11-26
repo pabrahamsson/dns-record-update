@@ -39,7 +39,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v4.1.4
         with:
-          cosign-release: 'v3.1.5'
+          cosign-release: 'v3.1.6'
 
       - name: Build image
         id: buildah-build
